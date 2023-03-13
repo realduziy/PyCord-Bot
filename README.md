@@ -1,4 +1,6 @@
-What is PY-Cord-Simple-Bot
+What is PY-Cord-Bot
+
+PY-Cord-Bot is a simple multi purpose bot coded in python.
 
 This bot is being developed by: duziy#9305
 
