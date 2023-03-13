@@ -8,4 +8,4 @@ Please do note that this bot is just a patient project
 
 I do not claim to own any of the code that is used for this bot as most of it is from ChatGPT, StackOverflow, or Youtube
 
-How to run the bot simply do py main.py in the terminal or run it via the batch file!
+How to run the bot simply do py main.py in the terminal!
