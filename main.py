@@ -19,21 +19,23 @@ token = configData["Token"]
 
 bot = commands.Bot()
 
+@bot.event
 async def on_ready():
- await bot.wait_until_ready()
-
- statuses = [f"{len(bot.guilds)} server's", "Need help? do /help"]
-
- while not bot.is_closed():
-
-   status = random.choice(statuses)
-
-   await bot.change_presence(activity=discord.Game(name=status))
-
-   await asyncio.sleep(5)
-
-bot.loop.create_task(on_ready())
-print("Bot is ready!")
+    print('Logged in as')
+    print(bot.user.name)
+    print(bot.user.id)
+    print('------')
+    while True:
+        total_members = 0
+        for guild in bot.guilds:
+            total_members += guild.member_count
+        activities = [
+            discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers and {total_members} members"),
+            discord.Activity(type=discord.ActivityType.watching, name="Need help? do /help")
+        ]
+        new_activity = random.choice(activities)
+        await bot.change_presence(activity=new_activity)
+        await asyncio.sleep(10)
 
 @bot.slash_command()
 async def hello(ctx):
@@ -218,6 +220,29 @@ async def meme(ctx):
     embed = discord.Embed(title=title)
     embed.set_image(url=url)
     await ctx.send(embed=embed)
+
+@bot.slash_command()
+@commands.has_permissions(mention_everyone=True)
+async def poll(ctx, question, *options):
+    # Only allow up to 10 options to avoid cluttering the poll
+    if len(options) > 10:
+        await ctx.send("Sorry, you can only have up to 10 poll options.")
+        return
+    
+    # Create the poll message
+    embed = discord.Embed(title=question, color=discord.Color.blue())
+    for i, option in enumerate(options):
+        embed.add_field(name=f"{i+1}. {option}", value="\u200b", inline=False)
+    try:
+        poll_msg = await ctx.send(embed=embed)
+    except discord.Forbidden:
+        await ctx.send("I don't have permission to mention everyone in this channel!")
+        return
+    
+    # Add reactions to the poll message for each option
+    reactions = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟']
+    for i in range(len(options)):
+        await poll_msg.add_reaction(reactions[i])
 
 @bot.slash_command()
 async def help(ctx):
