@@ -246,6 +246,7 @@ Fun:
 /eightball [question]: Responds with a random 8ball response to the given question.
 /roll [number of sides] : Rolls a dice with the specified number of sides.
 /math [your math question] : Does simple math for you.
+/advice : Gives you random advice.
 ''')
     await ctx.send(embed=embed)
 
