@@ -10,7 +10,7 @@ I do not claim to own any of the code that is used for this bot as most of it is
 
 Library I am using:
 
-<https://github.com/Pycord-Development/pycord>
+https://github.com/Pycord-Development/pycord
 
 All of the pip installs that it should be using and if not it's not my problem!
 
@@ -21,3 +21,9 @@ requests
 random
 asyncio
 asyncpraw
+
+To-do list:
+
+Change everything over to cogs to clean it up more (I have like no clue how I would do this I tried at some point and I kinda got lost so probably not going to any time soon)
+Logging system for moderation and what not
+Add a welcome and leave message, have it so you can set what channel it is in
