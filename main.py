@@ -276,5 +276,3 @@ Fun:
     await ctx.send(embed=embed)
 
 bot.run(token)
-
-#men
