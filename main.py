@@ -6,6 +6,7 @@ import requests
 import random
 import asyncio
 import asyncpraw
+import re
 
 if os.path.exists(os.getcwd() + "/config.json"):
     with open("./config.json") as f:
@@ -43,16 +44,34 @@ async def hello(ctx):
     return
 
 
-@bot.slash_command()
+@bot.slash_command(name="math", description="Performs basic math operations.")
 async def math(ctx, *, expression: str):
-    calculation = eval(expression)
-    await ctx.send('Math: {}\nAnswer: {}'.format(expression, calculation))
+    try:
+        # Split input expression into separate operations
+        operations = re.findall(r'\d+\s*[+\-*/]\s*\d+', expression)
 
+        # Evaluate each operation and accumulate the result
+        result = 0
+        for op in operations:
+            num1, operator, num2 = re.findall(
+                r'(\d+)\s*([+\-*/])\s*(\d+)', op)[0]
+            num1, num2 = int(num1), int(num2)
+            if operator == '+':
+                result += num1 + num2
+            elif operator == '-':
+                result += num1 - num2
+            elif operator == '*':
+                result += num1 * num2
+            elif operator == '/':
+                result += num1 / num2
+
+        await ctx.send(f"Result: {result}")
+    except Exception as e:
+        await ctx.send(f"Error: {str(e)}")
 
 @bot.slash_command()
 async def ping(ctx):
     await ctx.respond(f'Pong! {round(bot.latency * 1000)}ms')
-
 
 @bot.slash_command()
 async def announce(ctx, *, message=None):
