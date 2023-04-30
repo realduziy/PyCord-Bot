@@ -45,24 +45,26 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 ##########################################################
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
+
 channels_file = os.path.join(dir_path, "channels.json")
 
+
 def load_channels():
-    channels = {}
-    if os.path.isfile(channels_file) and os.path.getsize(channels_file) > 0:
-        with open(channels_file, 'r') as f:
-            channels = json.load(f)
-    return channels
+    with open(channels_file, 'r') as f:
+        return json.load(f)
+
 
 def save_channels(channels):
     with open(channels_file, 'w') as f:
-        json.dump(channels, f)
+        json.dump(channels, f, indent=4)
+
 
 def create_config(guild_id):
     channels = load_channels()
     if guild_id not in channels:
         channels[guild_id] = {"join": None, "leave": None}
         save_channels(channels)
+
 
 @bot.slash_command()
 async def setjoinchannel(ctx, channel: discord.TextChannel):
@@ -73,6 +75,7 @@ async def setjoinchannel(ctx, channel: discord.TextChannel):
     save_channels(channels)
     await ctx.send(f"Join channel set to {channel.mention}")
 
+
 @bot.slash_command()
 async def setleavechannel(ctx, channel: discord.TextChannel):
     guild_id = str(ctx.guild.id)
@@ -82,6 +85,8 @@ async def setleavechannel(ctx, channel: discord.TextChannel):
     save_channels(channels)
     await ctx.send(f"Leave channel set to {channel.mention}")
 
+
+
 @bot.event
 async def on_member_join(member):
     channels = load_channels()
@@ -89,6 +94,7 @@ async def on_member_join(member):
         welcome_channel = bot.get_channel(
             channels[str(member.guild.id)]["join"])
         await welcome_channel.send(f"{member.mention} has joined the server! Thank you")
+
 
 @bot.event
 async def on_member_remove(member):
@@ -105,6 +111,7 @@ async def on_member_remove(member):
 async def hello(ctx):
     await ctx.send(f'Hello, I am a bot made by the one and only duziy!')
     return
+
 
 @bot.slash_command(name="math", description="Performs basic math operations.")
 async def math(ctx, *, expression: str):
@@ -131,9 +138,11 @@ async def math(ctx, *, expression: str):
     except Exception as e:
         await ctx.send(f"Error: {str(e)}")
 
+
 @bot.slash_command()
 async def ping(ctx):
     await ctx.respond(f'Pong! {round(bot.latency * 1000)}ms')
+
 
 @bot.slash_command()
 async def announce(ctx, *, message=None):
@@ -160,6 +169,7 @@ async def clear(ctx, amount: int):
     msg = await ctx.send(f'Cleared {len(deleted)} messages.')
     await asyncio.sleep(5)  # wait for 5 seconds
     await msg.delete()  # delete the bot's message after 5 seconds
+
 
 @bot.slash_command()
 async def kick(ctx, user: discord.User):
