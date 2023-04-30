@@ -85,7 +85,8 @@ async def on_member_join(member):
     if str(member.guild.id) in channels and channels[str(member.guild.id)]["join"] is not None:
         welcome_channel = bot.get_channel(
             channels[str(member.guild.id)]["join"])
-        await welcome_channel.send(f"{member.mention} has joined the server! Thank you")
+        member_number = len(member.guild.members)
+        await welcome_channel.send(f"{member.mention} has joined the server, you are the {member_number} member to join!")
 
 @bot.event
 async def on_member_remove(member):
@@ -93,7 +94,7 @@ async def on_member_remove(member):
     if str(member.guild.id) in channels and channels[str(member.guild.id)]["leave"] is not None:
         leave_channel = bot.get_channel(
             channels[str(member.guild.id)]["leave"])
-        await leave_channel.send(f"{member.mention} has left the server :sob:")
+        await leave_channel.send(f"{member.mention} has left the server")
 
 ##########################################################
 
