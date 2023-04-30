@@ -21,6 +21,7 @@ requests
 random
 asyncio
 asyncpraw
+re (don't think you need to download this but its still a import)
 
 To-do list:
 
