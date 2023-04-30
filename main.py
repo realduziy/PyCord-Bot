@@ -1,3 +1,4 @@
+import os.path
 import discord
 from discord.ext import commands
 import json
@@ -37,35 +38,65 @@ async def on_ready():
 bot.loop.create_task(on_ready())
 print("Bot is ready!")
 
+intents = discord.Intents.default()
+intents.members = True
+bot = commands.Bot(command_prefix='!', intents=intents)
+
 ##########################################################
 
-# welcome messege and leave messege
+dir_path = os.path.dirname(os.path.realpath(__file__))
+channels_file = os.path.join(dir_path, "channels.json")
+
+def load_channels():
+    channels = {}
+    if os.path.isfile(channels_file) and os.path.getsize(channels_file) > 0:
+        with open(channels_file, 'r') as f:
+            channels = json.load(f)
+    return channels
+
+def save_channels(channels):
+    with open(channels_file, 'w') as f:
+        json.dump(channels, f)
+
+def create_config(guild_id):
+    channels = load_channels()
+    if guild_id not in channels:
+        channels[guild_id] = {"join": None, "leave": None}
+        save_channels(channels)
+
+@bot.slash_command()
+async def setjoinchannel(ctx, channel: discord.TextChannel):
+    guild_id = str(ctx.guild.id)
+    create_config(guild_id)
+    channels = load_channels()
+    channels[guild_id]["join"] = channel.id
+    save_channels(channels)
+    await ctx.send(f"Join channel set to {channel.mention}")
+
+@bot.slash_command()
+async def setleavechannel(ctx, channel: discord.TextChannel):
+    guild_id = str(ctx.guild.id)
+    create_config(guild_id)
+    channels = load_channels()
+    channels[guild_id]["leave"] = channel.id
+    save_channels(channels)
+    await ctx.send(f"Leave channel set to {channel.mention}")
 
 @bot.event
 async def on_member_join(member):
-    # check if the bot is a member of the server
-    if bot.user in member.guild.members:
-        welcome_channel = bot.get_channel(710250580857061579)
-        print(f"{member} has joined!")
+    channels = load_channels()
+    if str(member.guild.id) in channels and channels[str(member.guild.id)]["join"] is not None:
+        welcome_channel = bot.get_channel(
+            channels[str(member.guild.id)]["join"])
         await welcome_channel.send(f"{member.mention} has joined the server! Thank you")
-        try:
-            await member.send(f"Hey {member.display_name}! Thank you for joining the server")
-        except:
-            await welcome_channel.send(f"{member.mention} I can't dm you, but thank you for joining!")
-
 
 @bot.event
 async def on_member_remove(member):
-    # check if the bot is a member of the server
-    if bot.user in member.guild.members:
-        print(f"{member} has left!")
-        leave_channel = bot.get_channel(710250580857061579)
+    channels = load_channels()
+    if str(member.guild.id) in channels and channels[str(member.guild.id)]["leave"] is not None:
+        leave_channel = bot.get_channel(
+            channels[str(member.guild.id)]["leave"])
         await leave_channel.send(f"{member.mention} has left the server :sob:")
-
-        try:
-            await member.send(f"Hey {member.display_name}! goodbye")
-        except:
-            await leave_channel.send(f"{member.mention} I can't dm you, but goodbye")
 
 
 ##########################################################
@@ -126,8 +157,9 @@ async def clear(ctx, amount: int):
         await ctx.send('You can only clear between 1 and 100 messages at a time!')
         return
     deleted = await ctx.channel.purge(limit=amount)
-    await ctx.send(f'Cleared {len(deleted)} messages.')
-
+    msg = await ctx.send(f'Cleared {len(deleted)} messages.')
+    await asyncio.sleep(5)  # wait for 5 seconds
+    await msg.delete()  # delete the bot's message after 5 seconds
 
 @bot.slash_command()
 async def kick(ctx, user: discord.User):
