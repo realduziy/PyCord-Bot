@@ -14,14 +14,7 @@ https://github.com/Pycord-Development/pycord
 
 All of the pip installs that it should be using and if not it's not my problem!
 
-discord
-json
-os
-requests
-random
-asyncio
-asyncpraw
-re (don't think you need to download this but its still a import)
+discord, requests, random, asyncio, asyncpraw
 
 To-do list:
 
