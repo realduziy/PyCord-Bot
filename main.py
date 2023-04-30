@@ -21,7 +21,6 @@ token = configData["Token"]
 
 bot = commands.Bot(command_prefix='>')
 
-
 async def on_ready():
  await bot.wait_until_ready()
 
@@ -48,23 +47,19 @@ dir_path = os.path.dirname(os.path.realpath(__file__))
 
 channels_file = os.path.join(dir_path, "channels.json")
 
-
 def load_channels():
     with open(channels_file, 'r') as f:
         return json.load(f)
 
-
 def save_channels(channels):
     with open(channels_file, 'w') as f:
         json.dump(channels, f, indent=4)
-
 
 def create_config(guild_id):
     channels = load_channels()
     if guild_id not in channels:
         channels[guild_id] = {"join": None, "leave": None}
         save_channels(channels)
-
 
 @bot.slash_command()
 async def setjoinchannel(ctx, channel: discord.TextChannel):
@@ -75,7 +70,6 @@ async def setjoinchannel(ctx, channel: discord.TextChannel):
     save_channels(channels)
     await ctx.send(f"Join channel set to {channel.mention}")
 
-
 @bot.slash_command()
 async def setleavechannel(ctx, channel: discord.TextChannel):
     guild_id = str(ctx.guild.id)
@@ -85,8 +79,6 @@ async def setleavechannel(ctx, channel: discord.TextChannel):
     save_channels(channels)
     await ctx.send(f"Leave channel set to {channel.mention}")
 
-
-
 @bot.event
 async def on_member_join(member):
     channels = load_channels()
@@ -94,7 +86,6 @@ async def on_member_join(member):
         welcome_channel = bot.get_channel(
             channels[str(member.guild.id)]["join"])
         await welcome_channel.send(f"{member.mention} has joined the server! Thank you")
-
 
 @bot.event
 async def on_member_remove(member):
@@ -104,14 +95,12 @@ async def on_member_remove(member):
             channels[str(member.guild.id)]["leave"])
         await leave_channel.send(f"{member.mention} has left the server :sob:")
 
-
 ##########################################################
 
 @bot.slash_command()
 async def hello(ctx):
     await ctx.send(f'Hello, I am a bot made by the one and only duziy!')
     return
-
 
 @bot.slash_command(name="math", description="Performs basic math operations.")
 async def math(ctx, *, expression: str):
@@ -143,7 +132,6 @@ async def math(ctx, *, expression: str):
 async def ping(ctx):
     await ctx.respond(f'Pong! {round(bot.latency * 1000)}ms')
 
-
 @bot.slash_command()
 async def announce(ctx, *, message=None):
    if message == None:
@@ -155,7 +143,6 @@ async def announce(ctx, *, message=None):
        embed = discord.Embed(color=0xFF0000, title='', description=message)
        embed.set_footer(text=f'Announced By {ctx.author.name}')
        await ctx.send(embed=embed)
-
 
 @bot.slash_command(name="clear", description="Clears the specified number of messages in the channel.")
 async def clear(ctx, amount: int):
@@ -170,7 +157,6 @@ async def clear(ctx, amount: int):
     await asyncio.sleep(5)  # wait for 5 seconds
     await msg.delete()  # delete the bot's message after 5 seconds
 
-
 @bot.slash_command()
 async def kick(ctx, user: discord.User):
   guild = ctx.guild
@@ -183,7 +169,6 @@ async def kick(ctx, user: discord.User):
   if ctx.author.guild_permissions.kick_members:
     await ctx.send(embed=mbed)
     await guild.kick(user=user)
-
 
 @bot.slash_command()
 async def ban(ctx, user: discord.User):
@@ -198,7 +183,6 @@ async def ban(ctx, user: discord.User):
     await ctx.send(embed=mbed)
     await guild.ban(user=user)
 
-
 @bot.slash_command()
 async def unban(ctx, user: discord.User):
   guild = ctx.guild
@@ -212,7 +196,6 @@ async def unban(ctx, user: discord.User):
     await ctx.send(embed=mbed)
     await guild.unban(user=user)
 
-
 @bot.slash_command()
 async def dadjoke(ctx):
     url = "https://icanhazdadjoke.com/"
@@ -220,7 +203,6 @@ async def dadjoke(ctx):
     response = requests.get(url, headers=headers)
     joke = response.json()['joke']
     await ctx.send(joke)
-
 
 @bot.slash_command()
 async def cat(ctx):
@@ -231,7 +213,6 @@ async def cat(ctx):
     embed.set_image(url=data['url'])
     await ctx.send(embed=embed)
 
-
 @bot.slash_command()
 async def dog(ctx):
     url = "https://dog.ceo/api/breeds/image/random"
@@ -240,7 +221,6 @@ async def dog(ctx):
     embed = discord.Embed(title="Here's a dog!")
     embed.set_image(url=data)
     await ctx.send(embed=embed)
-
 
 @bot.slash_command()
 async def eightball(ctx, *, question):
@@ -265,14 +245,12 @@ async def eightball(ctx, *, question):
     response = random.choice(responses)
     await ctx.send(f"🎱 Question: {question}\n🎱 Answer: {response}")
 
-
 @bot.slash_command()
 @commands.has_permissions(administrator=True)
 async def lockdown(ctx, channel: discord.TextChannel):
     role = ctx.guild.default_role
     await channel.set_permissions(role, send_messages=False)
     await ctx.send(f"{channel.mention} has been locked down")
-
 
 @bot.slash_command()
 @commands.has_permissions(administrator=True)
@@ -281,12 +259,10 @@ async def unlock(ctx, channel: discord.TextChannel):
     await channel.set_permissions(role, send_messages=True)
     await ctx.send(f"{channel.mention} has been unlocked")
 
-
 @bot.slash_command()
 async def roll(ctx, sides: int):
     result = random.randint(1, sides)
     await ctx.send(f"Rolling a {sides}-sided dice... You rolled a {result}!")
-
 
 @bot.slash_command()
 async def howgay(ctx, member: discord.Member = None):
@@ -302,7 +278,6 @@ reddit = asyncpraw.Reddit(
     user_agent='duziy bot',
 )
 
-
 @bot.slash_command()
 async def meme(ctx):
     subreddit_name = 'memes'
@@ -317,7 +292,6 @@ async def meme(ctx):
     embed.set_image(url=url)
     await ctx.send(embed=embed)
 
-
 @bot.slash_command()
 async def advice(ctx):
     url = 'https://api.adviceslip.com/advice'
@@ -327,7 +301,6 @@ async def advice(ctx):
         await ctx.send(advice)
     else:
         await ctx.send('Oops, something went wrong. Please try again later.')
-
 
 @bot.slash_command()
 async def help(ctx):
