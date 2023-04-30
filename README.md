@@ -1,4 +1,4 @@
-This bot is being developed by: duziy#9305
+This bot is being developed by duziy, if you need any help or have any suggestion or wish to even help me fell free to private message me via discord @ duziy#9305
 
 NOTE: That this bot is still in a very early stage of development therefore there is not a lot of commands and I am not using cogs yet! At some point I may use them when I under stand more about bots and python in general. I want this to be as simple as it can be so not using cogs right now is the best thing for me really.
 
