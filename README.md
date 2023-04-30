@@ -8,13 +8,10 @@ What is PyCord-Bot?
 
 PyCord-Bot is a simple multipurpose discord bot coded in python.
 
-Main library I am using:
+Main library that is being used is Pycord : github.com/Pycord-Development/pycord
 
-github.com/Pycord-Development/pycord
+All of the pip installs that I am using should be, discord, requests, random, asyncio, asyncpraw and if thats not all of them then it's not my problem!
 
-All of the pip installs that it should be using and if not it's not my problem!
-
-discord, requests, random, asyncio, asyncpraw
 
 To-do list:
 
