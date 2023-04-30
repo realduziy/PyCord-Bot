@@ -37,12 +37,43 @@ async def on_ready():
 bot.loop.create_task(on_ready())
 print("Bot is ready!")
 
+##########################################################
+
+# welcome messege and leave messege
+
+@bot.event
+async def on_member_join(member):
+    # check if the bot is a member of the server
+    if bot.user in member.guild.members:
+        welcome_channel = bot.get_channel(710250580857061579)
+        print(f"{member} has joined!")
+        await welcome_channel.send(f"{member.mention} has joined the server! Thank you")
+        try:
+            await member.send(f"Hey {member.display_name}! Thank you for joining the server")
+        except:
+            await welcome_channel.send(f"{member.mention} I can't dm you, but thank you for joining!")
+
+
+@bot.event
+async def on_member_remove(member):
+    # check if the bot is a member of the server
+    if bot.user in member.guild.members:
+        print(f"{member} has left!")
+        leave_channel = bot.get_channel(710250580857061579)
+        await leave_channel.send(f"{member.mention} has left the server :sob:")
+
+        try:
+            await member.send(f"Hey {member.display_name}! goodbye")
+        except:
+            await leave_channel.send(f"{member.mention} I can't dm you, but goodbye")
+
+
+##########################################################
 
 @bot.slash_command()
 async def hello(ctx):
     await ctx.send(f'Hello, I am a bot made by the one and only duziy!')
     return
-
 
 @bot.slash_command(name="math", description="Performs basic math operations.")
 async def math(ctx, *, expression: str):
@@ -246,6 +277,17 @@ async def meme(ctx):
 
 
 @bot.slash_command()
+async def advice(ctx):
+    url = 'https://api.adviceslip.com/advice'
+    response = requests.get(url)
+    if response.status_code == 200:
+        advice = response.json()['slip']['advice']
+        await ctx.send(advice)
+    else:
+        await ctx.send('Oops, something went wrong. Please try again later.')
+
+
+@bot.slash_command()
 async def help(ctx):
     embed = discord.Embed(title="Here is a list of all of the bot commands", color=0xFF0000, description='''
 Utilities:
@@ -272,6 +314,7 @@ Fun:
 /eightball [question]: Responds with a random 8ball response to the given question.
 /roll [number of sides] : Rolls a dice with the specified number of sides.
 /math [your math question] : Does simple math for you.
+/advice : Gives you some random advice.
 ''')
     await ctx.send(embed=embed)
 
