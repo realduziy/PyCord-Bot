@@ -198,15 +198,18 @@ async def ping(ctx):
 
 @bot.slash_command()
 async def announce(ctx, *, message=None):
-   if message == None:
-       return
-   if (not ctx.author.guild_permissions.manage_messages):
-    await ctx.send('You do not have permission to use this command.')
-    return
-   else:
-       embed = discord.Embed(color=0xFF0000, title='', description=message)
-       embed.set_footer(text=f'Announced By {ctx.author.name}')
-       await ctx.send(embed=embed)
+    if message is None:
+        await ctx.send("Please provide a message to announce.")
+        return
+
+    if not ctx.author.guild_permissions.manage_messages:
+        await ctx.send("You do not have permission to use this command.")
+        return
+
+    embed = discord.Embed(title="", description=message, color=0xFF0000)
+    embed.set_footer(text=f"Announced by {ctx.author.name}")
+
+    await ctx.send(embed=embed)
 
 
 @bot.slash_command(name="clear", description="Clears the specified number of messages in the channel.")
@@ -225,30 +228,30 @@ async def clear(ctx, amount: int):
 
 @bot.slash_command()
 async def kick(ctx, user: discord.User):
-  guild = ctx.guild
-  mbed = discord.Embed(
-      description=f"{user} has been kicked"
-  )
-  if (not ctx.author.guild_permissions.kick_members):
-    await ctx.send('You do not have permission to use this command.')
-    return
-  if ctx.author.guild_permissions.kick_members:
-    await ctx.send(embed=mbed)
-    await guild.kick(user=user)
+    guild = ctx.guild
+    embed = discord.Embed(description=f"{user} has been kicked")
+    if not ctx.author.guild_permissions.kick_members:
+        await ctx.send('You do not have permission to use this command.')
+        return
+    try:
+        await guild.kick(user=user)
+    except discord.errors.NotFound:
+        pass
+    await ctx.send(embed=embed)
 
 
 @bot.slash_command()
 async def ban(ctx, user: discord.User):
-  guild = ctx.guild
-  mbed = discord.Embed(
-      description=f"{user} has been banned"
-  )
-  if (not ctx.author.guild_permissions.ban_members):
-    await ctx.send('You do not have permission to use this command.')
-    return
-  if ctx.author.guild_permissions.ban_members:
-    await ctx.send(embed=mbed)
-    await guild.ban(user=user)
+    guild = ctx.guild
+    embed = discord.Embed(description=f"{user} has been banned")
+    if not ctx.author.guild_permissions.ban_members:
+        await ctx.send('You do not have permission to use this command.')
+        return
+    try:
+        await guild.ban(user=user)
+    except discord.errors.NotFound:
+        pass
+    await ctx.send(embed=embed)
 
 
 @bot.slash_command()
