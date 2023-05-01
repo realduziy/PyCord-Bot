@@ -8,6 +8,12 @@ import random
 import asyncio
 import asyncpraw
 import re
+from discord.ext import bridge
+
+intents = discord.Intents.default()
+intents.message_content = True
+
+bot = bridge.Bot(command_prefix=">", intents=intents, help_command=None)
 
 if os.path.exists(os.getcwd() + "/config.json"):
     with open("./config.json") as f:
@@ -18,8 +24,6 @@ else:
         json.dump(configTemplate, f)
 
 token = configData["Token"]
-
-bot = commands.Bot(command_prefix='>')
 
 async def on_ready():
  await bot.wait_until_ready()
@@ -36,10 +40,6 @@ async def on_ready():
 
 bot.loop.create_task(on_ready())
 print("Bot is ready!")
-
-intents = discord.Intents.default()
-intents.members = True
-bot = commands.Bot(command_prefix='!', intents=intents)
 
 ##########################################################
 
@@ -66,7 +66,7 @@ def create_config(guild_id):
         save_channels(channels)
 
 
-@bot.slash_command()
+@bot.bridge_command()
 async def setjoinchannel(ctx, channel: discord.TextChannel):
     if not ctx.author.guild_permissions.administrator:
         await ctx.send("You need to be an administrator to use this command.")
@@ -80,7 +80,7 @@ async def setjoinchannel(ctx, channel: discord.TextChannel):
     await ctx.send(f"Join channel set to {channel.mention}")
 
 
-@bot.slash_command()
+@bot.bridge_command()
 async def setleavechannel(ctx, channel: discord.TextChannel):
     if not ctx.author.guild_permissions.administrator:
         await ctx.send("You need to be an administrator to use this command.")
@@ -94,7 +94,7 @@ async def setleavechannel(ctx, channel: discord.TextChannel):
     await ctx.send(f"Leave channel set to {channel.mention}")
 
 
-@bot.slash_command()
+@bot.bridge_command()
 async def setjoinmessage(ctx, message: str):
     if not ctx.author.guild_permissions.administrator:
         await ctx.send("You need to be an administrator to use this command.")
@@ -108,7 +108,7 @@ async def setjoinmessage(ctx, message: str):
     await ctx.send(f"Join message set to '{message}'")
 
 
-@bot.slash_command()
+@bot.bridge_command()
 async def setleavemessage(ctx, message: str):
     if not ctx.author.guild_permissions.administrator:
         await ctx.send("You need to be an administrator to use this command.")
@@ -148,10 +148,11 @@ async def on_member_remove(member):
 
 ##########################################################
 
-@bot.slash_command()
+@bot.bridge_command()
 async def hello(ctx):
     await ctx.send(f'Hello, I am a bot made by the one and only duziy!')
     return
+
 
 @bot.slash_command(name="math", description="Performs basic math operations.")
 async def math(ctx, *, expression: str):
@@ -179,11 +180,12 @@ async def math(ctx, *, expression: str):
         await ctx.send(f"Error: {str(e)}")
 
 
-@bot.slash_command()
+@bot.bridge_command()
 async def ping(ctx):
     await ctx.respond(f'Pong! {round(bot.latency * 1000)}ms')
 
-@bot.slash_command()
+
+@bot.bridge_command()
 async def announce(ctx, *, message=None):
    if message == None:
        return
@@ -194,6 +196,7 @@ async def announce(ctx, *, message=None):
        embed = discord.Embed(color=0xFF0000, title='', description=message)
        embed.set_footer(text=f'Announced By {ctx.author.name}')
        await ctx.send(embed=embed)
+
 
 @bot.slash_command(name="clear", description="Clears the specified number of messages in the channel.")
 async def clear(ctx, amount: int):
@@ -208,7 +211,8 @@ async def clear(ctx, amount: int):
     await asyncio.sleep(5)  # wait for 5 seconds
     await msg.delete()  # delete the bot's message after 5 seconds
 
-@bot.slash_command()
+
+@bot.bridge_command()
 async def kick(ctx, user: discord.User):
   guild = ctx.guild
   mbed = discord.Embed(
@@ -221,7 +225,8 @@ async def kick(ctx, user: discord.User):
     await ctx.send(embed=mbed)
     await guild.kick(user=user)
 
-@bot.slash_command()
+
+@bot.bridge_command()
 async def ban(ctx, user: discord.User):
   guild = ctx.guild
   mbed = discord.Embed(
@@ -234,7 +239,8 @@ async def ban(ctx, user: discord.User):
     await ctx.send(embed=mbed)
     await guild.ban(user=user)
 
-@bot.slash_command()
+
+@bot.bridge_command()
 async def unban(ctx, user: discord.User):
   guild = ctx.guild
   mbed = discord.Embed(
@@ -247,7 +253,8 @@ async def unban(ctx, user: discord.User):
     await ctx.send(embed=mbed)
     await guild.unban(user=user)
 
-@bot.slash_command()
+
+@bot.bridge_command()
 async def dadjoke(ctx):
     url = "https://icanhazdadjoke.com/"
     headers = {"Accept": "application/json"}
@@ -255,7 +262,8 @@ async def dadjoke(ctx):
     joke = response.json()['joke']
     await ctx.send(joke)
 
-@bot.slash_command()
+
+@bot.bridge_command()
 async def cat(ctx):
     url = "https://api.thecatapi.com/v1/images/search"
     response = requests.get(url)
@@ -264,7 +272,8 @@ async def cat(ctx):
     embed.set_image(url=data['url'])
     await ctx.send(embed=embed)
 
-@bot.slash_command()
+
+@bot.bridge_command()
 async def dog(ctx):
     url = "https://dog.ceo/api/breeds/image/random"
     response = requests.get(url)
@@ -273,7 +282,8 @@ async def dog(ctx):
     embed.set_image(url=data)
     await ctx.send(embed=embed)
 
-@bot.slash_command()
+
+@bot.bridge_command()
 async def eightball(ctx, *, question):
     responses = [
         "It is certain.",
@@ -296,26 +306,30 @@ async def eightball(ctx, *, question):
     response = random.choice(responses)
     await ctx.send(f"🎱 Question: {question}\n🎱 Answer: {response}")
 
-@bot.slash_command()
+
+@bot.bridge_command()
 @commands.has_permissions(administrator=True)
 async def lockdown(ctx, channel: discord.TextChannel):
     role = ctx.guild.default_role
     await channel.set_permissions(role, send_messages=False)
     await ctx.send(f"{channel.mention} has been locked down")
 
-@bot.slash_command()
+
+@bot.bridge_command()
 @commands.has_permissions(administrator=True)
 async def unlock(ctx, channel: discord.TextChannel):
     role = ctx.guild.default_role
     await channel.set_permissions(role, send_messages=True)
     await ctx.send(f"{channel.mention} has been unlocked")
 
-@bot.slash_command()
+
+@bot.bridge_command()
 async def roll(ctx, sides: int):
     result = random.randint(1, sides)
     await ctx.send(f"Rolling a {sides}-sided dice... You rolled a {result}!")
 
-@bot.slash_command()
+
+@bot.bridge_command()
 async def howgay(ctx, member: discord.Member = None):
     if member is None:
         member = ctx.author
@@ -329,7 +343,8 @@ reddit = asyncpraw.Reddit(
     user_agent='duziy bot',
 )
 
-@bot.slash_command()
+
+@bot.bridge_command()
 async def meme(ctx):
     subreddit_name = 'memes'
     subreddit = await reddit.subreddit(subreddit_name)
@@ -343,7 +358,8 @@ async def meme(ctx):
     embed.set_image(url=url)
     await ctx.send(embed=embed)
 
-@bot.slash_command()
+
+@bot.bridge_command()
 async def advice(ctx):
     url = 'https://api.adviceslip.com/advice'
     response = requests.get(url)
@@ -353,8 +369,9 @@ async def advice(ctx):
     else:
         await ctx.send('Oops, something went wrong. Please try again later.')
 
-@bot.slash_command()
-async def help(ctx):
+
+@bot.bridge_command()
+async def commands(ctx):
     embed = discord.Embed(title="Here is a list of all of the bot commands", color=0xFF0000, description='''
 Utilities:
 
@@ -387,5 +404,4 @@ Fun:
 /advice : Gives you some random advice.
 ''')
     await ctx.send(embed=embed)
-
 bot.run(token)
