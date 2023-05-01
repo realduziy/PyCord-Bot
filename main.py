@@ -13,7 +13,7 @@ from pathlib import Path
 intents = discord.Intents.default()
 intents.members = True
 
-bot = commands.Bot(command_prefix=">", intents=intents)
+bot = commands.Bot(intents=intents)
 
 if os.path.exists(os.getcwd() + "/config.json"):
     with open("./config.json") as f:
@@ -382,7 +382,7 @@ async def advice(ctx):
 
 
 @bot.slash_command()
-async def commands(ctx):
+async def help(ctx):
     embed = discord.Embed(title="Here is a list of all of the bot commands", color=0xFF0000, description='''
 Utilities:
 
