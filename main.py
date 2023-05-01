@@ -68,6 +68,10 @@ def create_config(guild_id):
 
 @bot.slash_command()
 async def setjoinchannel(ctx, channel: discord.TextChannel):
+    if not ctx.author.guild_permissions.administrator:
+        await ctx.send("You need to be an administrator to use this command.")
+        return
+
     guild_id = str(ctx.guild.id)
     create_config(guild_id)
     channels = load_channels()
@@ -78,6 +82,10 @@ async def setjoinchannel(ctx, channel: discord.TextChannel):
 
 @bot.slash_command()
 async def setleavechannel(ctx, channel: discord.TextChannel):
+    if not ctx.author.guild_permissions.administrator:
+        await ctx.send("You need to be an administrator to use this command.")
+        return
+
     guild_id = str(ctx.guild.id)
     create_config(guild_id)
     channels = load_channels()
@@ -88,6 +96,10 @@ async def setleavechannel(ctx, channel: discord.TextChannel):
 
 @bot.slash_command()
 async def setjoinmessage(ctx, message: str):
+    if not ctx.author.guild_permissions.administrator:
+        await ctx.send("You need to be an administrator to use this command.")
+        return
+
     guild_id = str(ctx.guild.id)
     create_config(guild_id)
     channels = load_channels()
@@ -98,6 +110,10 @@ async def setjoinmessage(ctx, message: str):
 
 @bot.slash_command()
 async def setleavemessage(ctx, message: str):
+    if not ctx.author.guild_permissions.administrator:
+        await ctx.send("You need to be an administrator to use this command.")
+        return
+
     guild_id = str(ctx.guild.id)
     create_config(guild_id)
     channels = load_channels()
@@ -344,7 +360,10 @@ Utilities:
 
 /ping: Displays the bot's latency.
 /announce [message]: Announces a message in the current channel (requires Manage Messages permission).
-/clear [amount]: Clears the specified amount of messages in the current channel (requires Manage Messages permission).
+/setjoinchannel [channel] - Set the channel where join messages will be posted. Only users with admin permissions can use this command.
+/setleavechannel [channel] - Set the channel where leave messages will be posted. Only users with admin permissions can use this command.
+/setjoinmessage [message] - Set the message that will be posted when a user joins the server. Only users with admin permissions can use this command. You can include the user's mention by including `{user}` and`{number}` for what number of user that they are in the message.
+/setleavemessage [message] - Set the message that will be posted when a user leaves the server. Only users with admin permissions can use this command. You can include the user's mention by including `{user}` and`{number}` for what number of user that they are in the message.
 
 Moderation:
 
@@ -353,6 +372,7 @@ Moderation:
 /unban [user]: Unbans the specified user from the server (requires Ban Members permission).
 /lockdown [channel]: Locks down the specified channel (requires Administrator permission).
 /unlock [channel]: Unlocks the specified channel (requires Administrator permission).
+/clear [amount]: Clears the specified amount of messages in the current channel (requires Manage Messages permission).
 
 Fun:
 
