@@ -70,7 +70,7 @@ def create_config(guild_id):
     channels = load_channels()
     if guild_id not in channels:
         channels[guild_id] = {"join": None, "leave": None,
-                              "join_message": "Welcome {user} to the server!", "leave_message": "Goodbye {user}!"}
+                              "join_message": "Welcome {user} to the server! You are the {member_count}th member.", "leave_message": "Goodbye {user}!"}
         save_channels(channels)
 
 
@@ -135,21 +135,27 @@ async def on_member_join(member):
         welcome_channel = bot.get_channel(
             channels[str(member.guild.id)]["join"])
         join_message = channels[str(member.guild.id)].get(
-            "join_message", "Welcome {user} to the server!")
+            "join_message", "Welcome {user} to the server! You are the {member_count} member to join.")
         join_message = join_message.replace("{user}", member.mention)
+        member_count = sum(
+            1 for member in member.guild.members if not member.bot)
+        join_message = join_message.replace(
+            "{member_count}", str(member_count))
         await welcome_channel.send(join_message)
 
 
 @bot.event
 async def on_member_remove(member):
     channels = load_channels()
-    if str(member.guild.id) in channels and channels[str(member.guild.id)]["leave"] is not None:
-        leave_channel = bot.get_channel(
-            channels[str(member.guild.id)]["leave"])
-        leave_message = channels[str(member.guild.id)].get(
-            "leave_message", "Goodbye {user}!")
-        leave_message = leave_message.replace("{user}", member.mention)
+    guild_id = str(member.guild.id)
+    if guild_id in channels and channels[guild_id]["leave"] is not None:
+        leave_channel = bot.get_channel(channels[guild_id]["leave"])
+        leave_message = channels[guild_id].get(
+            "leave_message", "Goodbye {user}! We are now {count} members.")
+        leave_message = leave_message.replace("{user}", member.mention).replace(
+            "{count}", str(member.guild.member_count))
         await leave_channel.send(leave_message)
+
 
 ##########################################################
 
