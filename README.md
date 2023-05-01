@@ -12,7 +12,7 @@ Main library that is being used is Pycord : github.com/Pycord-Development/pycord
 py -3 -m pip install git+https://github.com/Pycord-Development/pycord
 
 
-All of the pip installs that I am using should be, discord, requests, random, asyncio, asyncpraw and if thats not all of them then it's not my problem!
+All of the pip installs that I am using should be, discord, discord-bridge, requests, random, asyncio, asyncpraw and if thats not all of them then it's not my problem!
 
 
 To-do list:
