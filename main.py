@@ -47,19 +47,24 @@ dir_path = os.path.dirname(os.path.realpath(__file__))
 
 channels_file = os.path.join(dir_path, "channels.json")
 
+
 def load_channels():
     with open(channels_file, 'r') as f:
         return json.load(f)
+
 
 def save_channels(channels):
     with open(channels_file, 'w') as f:
         json.dump(channels, f, indent=4)
 
+
 def create_config(guild_id):
     channels = load_channels()
     if guild_id not in channels:
-        channels[guild_id] = {"join": None, "leave": None}
+        channels[guild_id] = {"join": None, "leave": None,
+                              "join_message": None, "leave_message": None}
         save_channels(channels)
+
 
 @bot.slash_command()
 async def setjoinchannel(ctx, channel: discord.TextChannel):
@@ -70,6 +75,7 @@ async def setjoinchannel(ctx, channel: discord.TextChannel):
     save_channels(channels)
     await ctx.send(f"Join channel set to {channel.mention}")
 
+
 @bot.slash_command()
 async def setleavechannel(ctx, channel: discord.TextChannel):
     guild_id = str(ctx.guild.id)
@@ -79,22 +85,50 @@ async def setleavechannel(ctx, channel: discord.TextChannel):
     save_channels(channels)
     await ctx.send(f"Leave channel set to {channel.mention}")
 
+
+@bot.slash_command()
+async def setjoinmessage(ctx, message: str):
+    guild_id = str(ctx.guild.id)
+    create_config(guild_id)
+    channels = load_channels()
+    channels[guild_id]["join_message"] = message
+    save_channels(channels)
+    await ctx.send(f"Join message set to '{message}'")
+
+
+@bot.slash_command()
+async def setleavemessage(ctx, message: str):
+    guild_id = str(ctx.guild.id)
+    create_config(guild_id)
+    channels = load_channels()
+    channels[guild_id]["leave_message"] = message
+    save_channels(channels)
+    await ctx.send(f"Leave message set to '{message}'")
+
+
 @bot.event
 async def on_member_join(member):
     channels = load_channels()
-    if str(member.guild.id) in channels and channels[str(member.guild.id)]["join"] is not None:
+    if str(member.guild.id) in channels and channels[str(member.guild.id)]["join_message"] is not None:
         welcome_channel = bot.get_channel(
             channels[str(member.guild.id)]["join"])
         member_number = len(member.guild.members)
-        await welcome_channel.send(f"{member.mention} has joined the server, you are the {member_number} member to join!")
+        join_message = channels[str(member.guild.id)]["join_message"]
+        join_message = join_message.replace("{user}", member.mention)
+        join_message = join_message.replace("{number}", str(member_number))
+        await welcome_channel.send(join_message)
+
 
 @bot.event
 async def on_member_remove(member):
     channels = load_channels()
-    if str(member.guild.id) in channels and channels[str(member.guild.id)]["leave"] is not None:
+    if str(member.guild.id) in channels and channels[str(member.guild.id)]["leave_message"] is not None:
         leave_channel = bot.get_channel(
             channels[str(member.guild.id)]["leave"])
-        await leave_channel.send(f"{member.mention} has left the server")
+        leave_message = channels[str(member.guild.id)]["leave_message"]
+        leave_message = leave_message.replace("{user}", member.mention)
+        await leave_channel.send(leave_message)
+
 
 ##########################################################
 
