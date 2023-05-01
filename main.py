@@ -1,3 +1,4 @@
+from pathlib import Path
 import os.path
 import discord
 from discord.ext import commands
@@ -9,6 +10,7 @@ import asyncio
 import asyncpraw
 import re
 from discord.ext import bridge
+from pathlib import Path
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -24,6 +26,7 @@ else:
         json.dump(configTemplate, f)
 
 token = configData["Token"]
+
 
 async def on_ready():
  await bot.wait_until_ready()
@@ -43,9 +46,8 @@ print("Bot is ready!")
 
 ##########################################################
 
-dir_path = os.path.dirname(os.path.realpath(__file__))
-
-channels_file = os.path.join(dir_path, "channels.json")
+dir_path = Path(__file__).parent.absolute()
+channels_file = dir_path / "channels.json"
 
 
 def load_channels():
@@ -62,8 +64,15 @@ def create_config(guild_id):
     channels = load_channels()
     if guild_id not in channels:
         channels[guild_id] = {"join": None, "leave": None,
-                              "join_message": None, "leave_message": None}
+                              "join_message": "Welcome {user} to the server! You are the {number}th member.",
+                              "leave_message": "{user} has left the server."}
         save_channels(channels)
+
+
+@bot.event
+async def on_guild_join(guild):
+    guild_id = str(guild.id)
+    create_config(guild_id)
 
 
 @bot.bridge_command()
@@ -95,11 +104,7 @@ async def setleavechannel(ctx, channel: discord.TextChannel):
 
 
 @bot.bridge_command()
-async def setjoinmessage(ctx, message: str):
-    if not ctx.author.guild_permissions.administrator:
-        await ctx.send("You need to be an administrator to use this command.")
-        return
-
+async def setjoinmessage(ctx, *, message: str):
     guild_id = str(ctx.guild.id)
     create_config(guild_id)
     channels = load_channels()
@@ -109,11 +114,7 @@ async def setjoinmessage(ctx, message: str):
 
 
 @bot.bridge_command()
-async def setleavemessage(ctx, message: str):
-    if not ctx.author.guild_permissions.administrator:
-        await ctx.send("You need to be an administrator to use this command.")
-        return
-
+async def setleavemessage(ctx, *, message: str):
     guild_id = str(ctx.guild.id)
     create_config(guild_id)
     channels = load_channels()
@@ -125,11 +126,12 @@ async def setleavemessage(ctx, message: str):
 @bot.event
 async def on_member_join(member):
     channels = load_channels()
-    if str(member.guild.id) in channels and channels[str(member.guild.id)]["join_message"] is not None:
+    if str(member.guild.id) in channels and channels[str(member.guild.id)]["join"] is not None:
         welcome_channel = bot.get_channel(
             channels[str(member.guild.id)]["join"])
         member_number = len(member.guild.members)
-        join_message = channels[str(member.guild.id)]["join_message"]
+        join_message = channels[str(member.guild.id)].get(
+            "join_message", "Welcome {user} to the server! You are the {number}th member.")
         join_message = join_message.replace("{user}", member.mention)
         join_message = join_message.replace("{number}", str(member_number))
         await welcome_channel.send(join_message)
@@ -138,11 +140,14 @@ async def on_member_join(member):
 @bot.event
 async def on_member_remove(member):
     channels = load_channels()
-    if str(member.guild.id) in channels and channels[str(member.guild.id)]["leave_message"] is not None:
+    if str(member.guild.id) in channels and channels[str(member.guild.id)]["leave"] is not None:
         leave_channel = bot.get_channel(
             channels[str(member.guild.id)]["leave"])
-        leave_message = channels[str(member.guild.id)]["leave_message"]
-        leave_message = leave_message.replace("{user}", member.mention)
+        leave_message = channels[str(member.guild.id)].get("leave_message")
+        if leave_message is None:
+            leave_message = f"{member.mention} has left the server."
+        else:
+            leave_message = leave_message.replace("{user}", member.mention)
         await leave_channel.send(leave_message)
 
 
@@ -154,7 +159,7 @@ async def hello(ctx):
     return
 
 
-@bot.slash_command(name="math", description="Performs basic math operations.")
+@bot.bridge_command(name="math", description="Performs basic math operations.")
 async def math(ctx, *, expression: str):
     try:
         # Split input expression into separate operations
@@ -198,7 +203,7 @@ async def announce(ctx, *, message=None):
        await ctx.send(embed=embed)
 
 
-@bot.slash_command(name="clear", description="Clears the specified number of messages in the channel.")
+@bot.bridge_command(name="clear", description="Clears the specified number of messages in the channel.")
 async def clear(ctx, amount: int):
     if not ctx.author.guild_permissions.manage_messages:
         await ctx.send('You do not have permission to use this command.')
@@ -404,4 +409,5 @@ Fun:
 /advice : Gives you some random advice.
 ''')
     await ctx.send(embed=embed)
+
 bot.run(token)
