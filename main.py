@@ -25,7 +25,6 @@ else:
 
 token = configData["Token"]
 
-
 async def on_ready():
  await bot.wait_until_ready()
 
@@ -45,26 +44,33 @@ print("Bot is ready!")
 ##########################################################
 
 @bot.event
-async def on_command_error(ctx, error):
-    if isinstance(error, commands.CommandNotFound):
-        return  # Don't log or print anything
-    print(f"An error occurred: {error}")
+async def on_application_command_error(ctx, error):
+    if isinstance(error, commands.CommandOnCooldown):
+        await ctx.respond(f"You are on cooldown. Try again in {error.retry_after:.2f}s.", delete_after=10)
+    elif isinstance(error, commands.NoPrivateMessage):
+        pass
+    elif isinstance(error, commands.MissingPermissions):
+        await ctx.respond("You don't have permission to use this command.")
+    elif isinstance(error, commands.NotOwner):
+        await ctx.respond("This command can only be used by the bot owner.")
+    elif isinstance(error, commands.CheckFailure):
+        pass
+    else:
+        await ctx.respond("An error occurred while running the command. Please try again later.")
+        raise error
 
 ##########################################################
 
 dir_path = Path(__file__).parent.absolute()
 channels_file = dir_path / "channels.json"
 
-
 def load_channels():
     with open(channels_file, 'r') as f:
         return json.load(f)
 
-
 def save_channels(channels):
     with open(channels_file, 'w') as f:
         json.dump(channels, f, indent=4)
-
 
 def create_config(guild_id):
     channels = load_channels()
@@ -73,12 +79,10 @@ def create_config(guild_id):
                               "join_message": "Welcome {user} to the server! You are the {member_count}th member.", "leave_message": "Goodbye {user}!"}
         save_channels(channels)
 
-
 @bot.event
 async def on_guild_join(guild):
     guild_id = str(guild.id)
     create_config(guild_id)
-
 
 @bot.slash_command()
 async def setjoinchannel(ctx, channel: discord.TextChannel):
@@ -93,7 +97,6 @@ async def setjoinchannel(ctx, channel: discord.TextChannel):
     save_channels(channels)
     await ctx.send(f"Join channel set to {channel.mention}")
 
-
 @bot.slash_command()
 async def setleavechannel(ctx, channel: discord.TextChannel):
     if not ctx.author.guild_permissions.administrator:
@@ -107,7 +110,6 @@ async def setleavechannel(ctx, channel: discord.TextChannel):
     save_channels(channels)
     await ctx.send(f"Leave channel set to {channel.mention}")
 
-
 @bot.slash_command()
 async def setjoinmessage(ctx, message: str):
     guild_id = str(ctx.guild.id)
@@ -117,7 +119,6 @@ async def setjoinmessage(ctx, message: str):
     save_channels(channels)
     await ctx.send(f"Join message set to '{message}'")
 
-
 @bot.slash_command()
 async def setleavemessage(ctx, message: str):
     guild_id = str(ctx.guild.id)
@@ -126,7 +127,6 @@ async def setleavemessage(ctx, message: str):
     channels[guild_id]["leave_message"] = message
     save_channels(channels)
     await ctx.send(f"Leave message set to '{message}'")
-
 
 @bot.event
 async def on_member_join(member):
@@ -143,19 +143,21 @@ async def on_member_join(member):
             "{member_count}", str(member_count))
         await welcome_channel.send(join_message)
 
-
 @bot.event
-async def on_member_remove(member):
+async def on_raw_member_remove(member):
+    if member.bot:  # Ignore if a bot leaves
+        return
+    
     channels = load_channels()
     guild_id = str(member.guild.id)
     if guild_id in channels and channels[guild_id]["leave"] is not None:
         leave_channel = bot.get_channel(channels[guild_id]["leave"])
-        leave_message = channels[guild_id].get(
-            "leave_message", "Goodbye {user}! We are now {count} members.")
-        leave_message = leave_message.replace("{user}", member.mention).replace(
-            "{count}", str(member.guild.member_count))
-        await leave_channel.send(leave_message)
-
+        if member.id not in member.guild.members:  # Member left voluntarily
+            leave_message = channels[guild_id].get(
+                "leave_message", "Goodbye {user}! We are now {count} members.")
+            leave_message = leave_message.replace("{user}", member.mention).replace(
+                "{count}", str(member.guild.member_count))
+            await leave_channel.send(leave_message)
 
 ##########################################################
 
@@ -163,7 +165,6 @@ async def on_member_remove(member):
 async def hello(ctx):
     await ctx.send(f'Hello, I am a bot made by the one and only duziy!')
     return
-
 
 @bot.slash_command(name="math", description="Performs basic math operations.")
 async def math(ctx, *, expression: str):
@@ -195,7 +196,6 @@ async def math(ctx, *, expression: str):
 async def ping(ctx):
     await ctx.respond(f'Pong! {round(bot.latency * 1000)}ms')
 
-
 @bot.slash_command()
 async def announce(ctx, *, message=None):
     if message is None:
@@ -211,7 +211,6 @@ async def announce(ctx, *, message=None):
 
     await ctx.send(embed=embed)
 
-
 @bot.slash_command(name="clear", description="Clears the specified number of messages in the channel.")
 async def clear(ctx, amount: int):
     if not ctx.author.guild_permissions.manage_messages:
@@ -224,7 +223,6 @@ async def clear(ctx, amount: int):
     msg = await ctx.send(f'Cleared {len(deleted)} messages.')
     await asyncio.sleep(5)  # wait for 5 seconds
     await msg.delete()  # delete the bot's message after 5 seconds
-
 
 @bot.slash_command()
 async def kick(ctx, user: discord.User):
@@ -239,7 +237,6 @@ async def kick(ctx, user: discord.User):
         pass
     await ctx.send(embed=embed)
 
-
 @bot.slash_command()
 async def ban(ctx, user: discord.User):
     guild = ctx.guild
@@ -252,7 +249,6 @@ async def ban(ctx, user: discord.User):
     except discord.errors.NotFound:
         pass
     await ctx.send(embed=embed)
-
 
 @bot.slash_command()
 async def unban(ctx, user: discord.User):
@@ -267,7 +263,6 @@ async def unban(ctx, user: discord.User):
     await ctx.send(embed=mbed)
     await guild.unban(user=user)
 
-
 @bot.slash_command()
 async def dadjoke(ctx):
     url = "https://icanhazdadjoke.com/"
@@ -275,7 +270,6 @@ async def dadjoke(ctx):
     response = requests.get(url, headers=headers)
     joke = response.json()['joke']
     await ctx.send(joke)
-
 
 @bot.slash_command()
 async def cat(ctx):
@@ -286,7 +280,6 @@ async def cat(ctx):
     embed.set_image(url=data['url'])
     await ctx.send(embed=embed)
 
-
 @bot.slash_command()
 async def dog(ctx):
     url = "https://dog.ceo/api/breeds/image/random"
@@ -295,7 +288,6 @@ async def dog(ctx):
     embed = discord.Embed(title="Here's a dog!")
     embed.set_image(url=data)
     await ctx.send(embed=embed)
-
 
 @bot.slash_command()
 async def eightball(ctx, *, question):
@@ -320,14 +312,12 @@ async def eightball(ctx, *, question):
     response = random.choice(responses)
     await ctx.send(f"🎱 Question: {question}\n🎱 Answer: {response}")
 
-
 @bot.slash_command()
 @commands.has_permissions(administrator=True)
 async def lockdown(ctx, channel: discord.TextChannel):
     role = ctx.guild.default_role
     await channel.set_permissions(role, send_messages=False)
     await ctx.send(f"{channel.mention} has been locked down")
-
 
 @bot.slash_command()
 @commands.has_permissions(administrator=True)
@@ -336,12 +326,10 @@ async def unlock(ctx, channel: discord.TextChannel):
     await channel.set_permissions(role, send_messages=True)
     await ctx.send(f"{channel.mention} has been unlocked")
 
-
 @bot.slash_command()
 async def roll(ctx, sides: int):
     result = random.randint(1, sides)
     await ctx.send(f"Rolling a {sides}-sided dice... You rolled a {result}!")
-
 
 @bot.slash_command()
 async def howgay(ctx, member: discord.Member = None):
@@ -357,7 +345,6 @@ reddit = asyncpraw.Reddit(
     user_agent='duziy bot',
 )
 
-
 @bot.slash_command()
 async def meme(ctx):
     subreddit_name = 'memes'
@@ -372,7 +359,6 @@ async def meme(ctx):
     embed.set_image(url=url)
     await ctx.send(embed=embed)
 
-
 @bot.slash_command()
 async def advice(ctx):
     url = 'https://api.adviceslip.com/advice'
@@ -382,7 +368,6 @@ async def advice(ctx):
         await ctx.send(advice)
     else:
         await ctx.send('Oops, something went wrong. Please try again later.')
-
 
 @bot.slash_command()
 async def help(ctx):
