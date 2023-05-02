@@ -25,20 +25,20 @@ else:
 
 token = configData["Token"]
 
+##########################################################
+
+@bot.event
 async def on_ready():
- await bot.wait_until_ready()
+    statuses = [
+        {"type": discord.ActivityType.watching,
+            "name": f"over {len(bot.guilds)} servers"},
+        {"type": discord.ActivityType.listening, "name": "/help for help"}
+    ]
 
- statuses = [f"listening on {len(bot.guilds)} server's", "Need help? do /help"]
-
- while not bot.is_closed():
-
-   status = random.choice(statuses)
-
-   await bot.change_presence(activity=discord.Game(name=status))
-
-   await asyncio.sleep(5)
-
-bot.loop.create_task(on_ready())
+    while not bot.is_closed():
+        status = random.choice(statuses)
+        await bot.change_presence(activity=discord.Activity(type=status["type"], name=status["name"]))
+        await asyncio.sleep(10)
 print("Bot is ready!")
 
 ##########################################################
