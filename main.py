@@ -37,9 +37,9 @@ async def change_activity():
     servers = len(bot.guilds)
     members = sum(len(guild.members) for guild in bot.guilds)
     activities = [
-        discord.Activity(type=discord.ActivityType.watching, name=f"over {servers} servers"),
-        discord.Activity(type=discord.ActivityType.watching, name=f"{members} members"),
-        discord.Activity(type=discord.ActivityType.listening, name="/help for help"),
+        discord.Activity(type=discord.ActivityType.watching,name=f"over {servers} servers"),
+        discord.Activity(type=discord.ActivityType.watching,name=f"{members} members"),
+        discord.Activity(type=discord.ActivityType.listening,name="/help for help"),
     ]
     activity_cycle = itertools.cycle(activities)
     while True:
