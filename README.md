@@ -17,8 +17,16 @@ All of the pip installs that I am using should be, discord, discord-bridge, requ
 
 To-do list:
 
+Recode some commands again to make it cleaner (I've already started doing that a little bit)
+
 Change everything over to cogs to clean it up more (I have no clue how I would do this I tried at some point and I kinda got lost so probably not going to any time soon)
 
-Logging system for moderation and what not
+Logging System (Be able to edit what you want to be logged)
 
-Make it so you can set a custom messege via a command for the welcome and leave messege
+Auto Moderation (Be able to edit what you want to be logged)
+
+Ticket System
+
+Verification System
+
+Better over all error handling as sometimes it will log stuff in console that it does not need to
