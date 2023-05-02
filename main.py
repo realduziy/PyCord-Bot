@@ -9,6 +9,7 @@ import asyncpraw
 import re
 from discord.ext import commands
 from pathlib import Path
+import itertools
 
 intents = discord.Intents.default()
 intents.members = True
@@ -29,17 +30,22 @@ token = configData["Token"]
 
 @bot.event
 async def on_ready():
-    statuses = [
-        {"type": discord.ActivityType.watching,
-            "name": f"over {len(bot.guilds)} servers"},
-        {"type": discord.ActivityType.listening, "name": "/help for help"}
-    ]
+    print("Bot is Online")
+    bot.loop.create_task(change_activity())
 
-    while not bot.is_closed():
-        status = random.choice(statuses)
-        await bot.change_presence(activity=discord.Activity(type=status["type"], name=status["name"]))
+async def change_activity():
+    servers = len(bot.guilds)
+    members = sum(len(guild.members) for guild in bot.guilds)
+    activities = [
+        discord.Activity(type=discord.ActivityType.watching, name=f"over {servers} servers"),
+        discord.Activity(type=discord.ActivityType.watching, name=f"{members} members"),
+        discord.Activity(type=discord.ActivityType.listening, name="/help for help"),
+    ]
+    activity_cycle = itertools.cycle(activities)
+    while True:
+        activity = next(activity_cycle)
+        await bot.change_presence(activity=activity)
         await asyncio.sleep(10)
-print("Bot is ready!")
 
 ##########################################################
 
