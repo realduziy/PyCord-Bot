@@ -11,8 +11,7 @@ PyCord-Bot is a simple multipurpose discord bot coded in Python.
 The main library that is being used is Pycord: github.com/Pycord-Development/pycord or just install it via this command to make sure it's all correct : 
 py -3 -m pip install git+https://github.com/Pycord-Development/pycord
 
-All of the pip installs that I am using should be, discord, discord-bridge, requests, random, asyncio, asyncpraw and if that's not all of them then it's not my problem!
-
+All of the pip installs that I am using should be, discord, discord-bridge, asyncio, asyncpraw and if that's not all of them then it's not my problem!
 
 Note:
 
@@ -32,4 +31,4 @@ Ticket System
 
 Verification System
 
-Better over all error handling as sometimes it will log stuff in console that it does not need to
+Better error handling because im still using my old method of doing so
