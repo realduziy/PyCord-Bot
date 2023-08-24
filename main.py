@@ -11,10 +11,7 @@ from discord.ext import commands
 from pathlib import Path
 import itertools
 
-intents = discord.Intents.default()
-intents.members = True
-
-bot = commands.Bot(intents=intents)
+bot = commands.Bot()
 
 if os.path.exists(os.getcwd() + "/config.json"):
     with open("./config.json") as f:
