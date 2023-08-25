@@ -1,6 +1,6 @@
 This bot is being developed by duziy, If you need any help have any suggestion, or wish to help me feel free to private message me via discord @ duziy
 
-NOTE: This bot is still in an early stage of development! At some point, I may use COGS when I understand more about bots and Python in general. I want this to be as simple as it can be so not using COGS is the best thing for me really.
+NOTE: This bot is still in an early stage of development! At some point, I may use COGS when I understand more about bots and Python in general. I want this to be as simple as it can be so for the time being learning COGS is not on my list of priorities.
 
 Also do note that I don't claim to own any of the code that is used for this bot as most of it is from ChatGPT, StackOverflow, or Youtube!
 
@@ -8,7 +8,7 @@ What is PyCord-Bot?
 
 PyCord-Bot is a simple multipurpose discord bot coded in Python.
 
-The main library that is being used is Pycord: github.com/Pycord-Development/pycord or just install it via this command to make sure it's all correct : 
+The main library that is being used is Py-Cord: github.com/Pycord-Development/pycord or just install it via this command: 
 py -3 -m pip install git+https://github.com/Pycord-Development/pycord
 
 All of the pip installs that I am using should be, discord, discord-bridge, asyncio, asyncpraw and if that's not all of them then it's not my problem!
