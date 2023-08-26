@@ -22,18 +22,12 @@ Basic bot functionalities have been completed as of 5/1/2023
 
 To-do list:
 
-Recode some commands again to make it cleaner (Started doing that a little bit)
-
 Change everything over to cogs to clean it up more (This will be at a later date as I do not know how to really do this yet)
 
 Logging System (Be able to edit what you want to be logged)
 
-Auto Moderation (Be able to edit what you want to be logged)
-
-Mute/timeout command (I can't figure this out for the life of me :|)
+Auto-Moderation (Be able to edit what you want to be logged)
 
 Ticket System
 
 Verification System
-
-Better error handling because im still using my old method of doing so
