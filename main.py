@@ -374,37 +374,84 @@ async def advice(ctx):
 
 @bot.slash_command()
 async def help(ctx):
-    embed = discord.Embed(title="Here is a list of all of the bot commands", color=0xFF0000, description='''
-Utilities:
+    contents = [
+        '''
+        **Utilities:**
 
-/ping: Displays the bot's latency.
-/announce [message]: Announces a message in the current channel (requires Manage Messages permission).
-/setjoinchannel [channel] - Set the channel where join messages will be posted. Only users with admin permissions can use this command.
-/setleavechannel [channel] - Set the channel where leave messages will be posted. Only users with admin permissions can use this command.
-/setjoinmessage [message] - Set the message that will be posted when a user joins the server. Only users with admin permissions can use this command. You can include the user's mention by including `{user}` and`{number}` for what number of user that they are in the message.
-/setleavemessage [message] - Set the message that will be posted when a user leaves the server. Only users with admin permissions can use this command. You can include the user's mention by including `{user}` and`{number}` for what number of user that they are in the message.
+        `/ping`: Displays the bot's latency.
+        `/announce [message]`: Announces a message in the current channel (requires Manage Messages permission).
+        `/setjoinchannel [channel]`: Set the channel where join messages will be posted. Only users with admin permissions can use this command.
+        `/setleavechannel [channel]`: Set the channel where leave messages will be posted. Only users with admin permissions can use this command.
+        `/setjoinmessage [message]`: Set the message that will be posted when a user joins the server. Only users with admin permissions can use this command. You can include the user's mention by including `{user}` and `{number}` for what number of user that they are in the message.
+        `/setleavemessage [message]`: Set the message that will be posted when a user leaves the server. Only users with admin permissions can use this command. You can include the user's mention by including `{user}` and `{number}` for what number of user that they are in the message.
+        ''',
 
-Moderation:
+        '''
+        **Moderation:**
 
-/kick [user]: Kicks the specified user from the server (requires Kick Members permission).
-/ban [user]: Bans the specified user from the server (requires Ban Members permission).
-/unban [user]: Unbans the specified user from the server (requires Ban Members permission).
-/lockdown [channel]: Locks down the specified channel (requires Administrator permission).
-/unlock [channel]: Unlocks the specified channel (requires Administrator permission).
-/clear [amount]: Clears the specified amount of messages in the current channel (requires Manage Messages permission).
+        `/kick [user]`: Kicks the specified user from the server (requires Kick Members permission).
+        `/ban [user]`: Bans the specified user from the server (requires Ban Members permission).
+        `/unban [user]`: Unbans the specified user from the server (requires Ban Members permission).
+        `/lockdown [channel]`: Locks down the specified channel (requires Administrator permission).
+        `/unlock [channel]`: Unlocks the specified channel (requires Administrator permission).
+        `/clear [amount]`: Clears the specified amount of messages in the current channel (requires Manage Messages permission).
+        ''',
 
-Fun:
+        '''
+        **Fun:**
 
-/hello: Greets the user.
-/meme: Fetches a random meme.
-/dadjoke: Fetches a random dad joke.
-/cat: Fetches a random picture of a cat.
-/dog: Fetches a random picture of a dog.
-/eightball [question]: Responds with a random 8ball response to the given question.
-/roll [number of sides] : Rolls a dice with the specified number of sides.
-/math [your math question] : Does simple math for you.
-/advice : Gives you some random advice.
-''')
-    await ctx.send(embed=embed)
+        `/hello`: Greets the user.
+        `/meme`: Fetches a random meme.
+        `/dadjoke`: Fetches a random dad joke.
+        `/cat`: Fetches a random picture of a cat.
+        `/dog`: Fetches a random picture of a dog.
+        `/eightball [question]`: Responds with a random 8ball response to the given question.
+        `/roll [number of sides]`: Rolls a dice with the specified number of sides.
+        `/math [your math question]`: Does simple math for you.
+        `/advice`: Gives you some random advice.
+        ''',
+    ]
+
+    pages = len(contents)
+    cur_page = 0
+    embed = discord.Embed(description=contents[cur_page], color=discord.Color.blurple())
+    embed.set_footer(text=f"Page {cur_page+1}/{pages}")
+
+    message = await ctx.send(embed=embed)
+    await message.add_reaction("◀️")
+    await message.add_reaction("▶️")
+    await message.add_reaction("❌")  # Add cancel reaction
+
+    def check(reaction, user):
+        return user == ctx.author and str(reaction.emoji) in ["◀️", "▶️", "❌"]
+
+    while True:
+        try:
+            reaction, user = await bot.wait_for("reaction_add", timeout=30, check=check)
+
+            if str(reaction.emoji) == "▶️" and cur_page < pages - 1:
+                cur_page += 1
+                embed.description = contents[cur_page]
+                embed.set_footer(text=f"Page {cur_page+1}/{pages}")
+                await message.edit(embed=embed)
+                await message.remove_reaction(reaction, user)
+
+            elif str(reaction.emoji) == "◀️" and cur_page > 0:
+                cur_page -= 1
+                embed.description = contents[cur_page]
+                embed.set_footer(text=f"Page {cur_page+1}/{pages}")
+                await message.edit(embed=embed)
+                await message.remove_reaction(reaction, user)
+
+            elif str(reaction.emoji) == "❌":
+                await message.delete()  # Delete the message
+                break
+
+            else:
+                await message.remove_reaction(reaction, user)
+
+        except asyncio.TimeoutError:
+            await message.delete()
+            break
 
 bot.run(token)
