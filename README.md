@@ -12,7 +12,7 @@ The main library that is being used is Py-Cord.
 You can view it at https://github.com/Pycord-Development/pycord or install it via this command: 
 py -3 -m pip install git+https://github.com/Pycord-Development/pycord
 
-All of the pip installs I am using should be, discord, discord-bridge, asyncio, asyncpraw and if I'm missing one feel free to let me know via discord or create an issue request, and I'll take a look into it. 
+All of the pip installs I am using should be, discord, discord-bridge, asyncio, asyncpraw, aiohttp, and if I'm missing one feel free to let me know via discord or create an issue request, and I'll take a look into it. 
 
 If you find a bug feel free to let me know via Discord or via an issue request but do note that I may not fix it for some time as I dont update this often.
 
@@ -31,3 +31,5 @@ Auto-Moderation (Be able to edit what you want to be logged)
 Ticket System
 
 Verification System
+
+Make a better lockdown command and make it so you can select what channels you want the lockdown command to lockdown by default. If there is none it will just be the channel that you sent the command in.
