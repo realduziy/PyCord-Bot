@@ -9,12 +9,11 @@ import asyncpraw
 import re
 from discord.ext import commands
 from pathlib import Path
-import itertools
 
 intents = discord.Intents.default()
 intents.members = True
-bot = commands.Bot()
 
+bot = commands.Bot(intents=intents)
 
 if os.path.exists(os.getcwd() + "/config.json"):
     with open("./config.json") as f:
@@ -26,26 +25,22 @@ else:
 
 token = configData["Token"]
 
-##########################################################
 
-@bot.event
 async def on_ready():
-    print("Bot is Online")
-    bot.loop.create_task(change_activity())
+ await bot.wait_until_ready()
 
-async def change_activity():
-    servers = len(bot.guilds)
-    members = sum(len(guild.members) for guild in bot.guilds)
-    activities = [
-        discord.Activity(type=discord.ActivityType.watching,name=f"over {servers} servers"),
-        discord.Activity(type=discord.ActivityType.watching,name=f"{members} members"),
-        discord.Activity(type=discord.ActivityType.listening,name="/help for help"),
-    ]
-    activity_cycle = itertools.cycle(activities)
-    while True:
-        activity = next(activity_cycle)
-        await bot.change_presence(activity=activity)
-        await asyncio.sleep(10)
+ statuses = [f"listening on {len(bot.guilds)} server's", "Need help? do /help"]
+
+ while not bot.is_closed():
+
+   status = random.choice(statuses)
+
+   await bot.change_presence(activity=discord.Game(name=status))
+
+   await asyncio.sleep(5)
+
+bot.loop.create_task(on_ready())
+print("Bot is ready!")
 
 ##########################################################
 
@@ -70,13 +65,16 @@ async def on_application_command_error(ctx, error):
 dir_path = Path(__file__).parent.absolute()
 channels_file = dir_path / "channels.json"
 
+
 def load_channels():
     with open(channels_file, 'r') as f:
         return json.load(f)
 
+
 def save_channels(channels):
     with open(channels_file, 'w') as f:
         json.dump(channels, f, indent=4)
+
 
 def create_config(guild_id):
     channels = load_channels()
@@ -85,17 +83,16 @@ def create_config(guild_id):
                               "join_message": "Welcome {user} to the server! You are the {member_count}th member.", "leave_message": "Goodbye {user}!"}
         save_channels(channels)
 
+
 @bot.event
 async def on_guild_join(guild):
     guild_id = str(guild.id)
     create_config(guild_id)
 
-@bot.slash_command()
-async def setjoinchannel(ctx, channel: discord.TextChannel):
-    if not ctx.author.guild_permissions.administrator:
-        await ctx.send("You need to be an administrator to use this command.")
-        return
 
+@bot.slash_command(name="setjoinchannel", description="Set join channel for the bot.")
+@commands.has_permissions(manage_messages=True)
+async def setjoinchannel(ctx, channel: discord.TextChannel):
     guild_id = str(ctx.guild.id)
     create_config(guild_id)
     channels = load_channels()
@@ -103,12 +100,9 @@ async def setjoinchannel(ctx, channel: discord.TextChannel):
     save_channels(channels)
     await ctx.send(f"Join channel set to {channel.mention}")
 
-@bot.slash_command()
+@bot.slash_command(name="setleavechannel", description="Set leave channel for the bot.")
+@commands.has_permissions(manage_messages=True)
 async def setleavechannel(ctx, channel: discord.TextChannel):
-    if not ctx.author.guild_permissions.administrator:
-        await ctx.send("You need to be an administrator to use this command.")
-        return
-
     guild_id = str(ctx.guild.id)
     create_config(guild_id)
     channels = load_channels()
@@ -116,7 +110,9 @@ async def setleavechannel(ctx, channel: discord.TextChannel):
     save_channels(channels)
     await ctx.send(f"Leave channel set to {channel.mention}")
 
-@bot.slash_command()
+
+@bot.slash_command(name="setjoinmessage", description="Set join message for the bot.")
+@commands.has_permissions(manage_messages=True)  # Replace with the appropriate permission(s)
 async def setjoinmessage(ctx, message: str):
     guild_id = str(ctx.guild.id)
     create_config(guild_id)
@@ -125,7 +121,8 @@ async def setjoinmessage(ctx, message: str):
     save_channels(channels)
     await ctx.send(f"Join message set to '{message}'")
 
-@bot.slash_command()
+@bot.slash_command(name="setleavemessage", description="Set leave message for the bot.")
+@commands.has_permissions(manage_messages=True)  # Replace with the appropriate permission(s)
 async def setleavemessage(ctx, message: str):
     guild_id = str(ctx.guild.id)
     create_config(guild_id)
@@ -133,6 +130,7 @@ async def setleavemessage(ctx, message: str):
     channels[guild_id]["leave_message"] = message
     save_channels(channels)
     await ctx.send(f"Leave message set to '{message}'")
+
 
 @bot.event
 async def on_member_join(member):
@@ -149,50 +147,19 @@ async def on_member_join(member):
             "{member_count}", str(member_count))
         await welcome_channel.send(join_message)
 
+
 @bot.event
-async def on_raw_member_remove(member):
-    if member.bot:  # Ignore if a bot leaves
-        return
-    
+async def on_member_remove(member):
     channels = load_channels()
     guild_id = str(member.guild.id)
     if guild_id in channels and channels[guild_id]["leave"] is not None:
         leave_channel = bot.get_channel(channels[guild_id]["leave"])
-        if member.id not in member.guild.members:  # Member left voluntarily
-            leave_message = channels[guild_id].get(
-                "leave_message", "Goodbye {user}! We are now {count} members.")
-            leave_message = leave_message.replace("{user}", member.mention).replace(
-                "{count}", str(member.guild.member_count))
-            await leave_channel.send(leave_message)
+        leave_message = channels[guild_id].get(
+            "leave_message", "Goodbye {user}! We are now {count} members.")
+        leave_message = leave_message.replace("{user}", member.mention).replace(
+            "{count}", str(member.guild.member_count))
+        await leave_channel.send(leave_message)
 
-# mute command
-
-@bot.slash_command()
-@commands.has_permissions(manage_roles=True)
-async def mute(ctx, member: discord.Member, *, reason="No reason provided."):
-    mute_role = discord.utils.get(ctx.guild.roles, name="Muted")
-
-    if not mute_role:
-        # If the Muted role doesn't exist, create it
-        mute_role = await ctx.guild.create_role(name="Muted")
-
-        # Update permissions for channels
-        for channel in ctx.guild.channels:
-            await channel.set_permissions(mute_role, send_messages=False)
-
-    await member.add_roles(mute_role, reason=reason)
-    await ctx.send(f"{member.mention} has been muted. Reason: {reason}")
-
-@bot.slash_command()
-@commands.has_permissions(manage_roles=True)
-async def unmute(ctx, member: discord.Member):
-    mute_role = discord.utils.get(ctx.guild.roles, name="Muted")
-
-    if mute_role in member.roles:
-        await member.remove_roles(mute_role)
-        await ctx.send(f"{member.mention} has been unmuted.")
-    else:
-        await ctx.send(f"{member.mention} is not muted.")
 
 ##########################################################
 
@@ -200,6 +167,7 @@ async def unmute(ctx, member: discord.Member):
 async def hello(ctx):
     await ctx.send(f'Hello, I am a bot made by the one and only duziy!')
     return
+
 
 @bot.slash_command(name="math", description="Performs basic math operations.")
 async def math(ctx, *, expression: str):
@@ -230,6 +198,7 @@ async def math(ctx, *, expression: str):
 @bot.slash_command()
 async def ping(ctx):
     await ctx.respond(f'Pong! {round(bot.latency * 1000)}ms')
+
 
 @bot.slash_command()
 @commands.has_permissions(manage_messages=True)
@@ -283,6 +252,7 @@ async def unban(ctx, user: discord.User):
     embed = discord.Embed(description=f"{user} has been unbanned")
     await ctx.send(embed=embed)
 
+
 @bot.slash_command()
 async def dadjoke(ctx):
     url = "https://icanhazdadjoke.com/"
@@ -290,6 +260,7 @@ async def dadjoke(ctx):
     response = requests.get(url, headers=headers)
     joke = response.json()['joke']
     await ctx.send(joke)
+
 
 @bot.slash_command()
 async def cat(ctx):
@@ -300,6 +271,7 @@ async def cat(ctx):
     embed.set_image(url=data['url'])
     await ctx.send(embed=embed)
 
+
 @bot.slash_command()
 async def dog(ctx):
     url = "https://dog.ceo/api/breeds/image/random"
@@ -308,6 +280,7 @@ async def dog(ctx):
     embed = discord.Embed(title="Here's a dog!")
     embed.set_image(url=data)
     await ctx.send(embed=embed)
+
 
 @bot.slash_command()
 async def eightball(ctx, *, question):
@@ -332,12 +305,14 @@ async def eightball(ctx, *, question):
     response = random.choice(responses)
     await ctx.send(f"🎱 Question: {question}\n🎱 Answer: {response}")
 
+
 @bot.slash_command()
 @commands.has_permissions(administrator=True)
 async def lockdown(ctx, channel: discord.TextChannel):
     role = ctx.guild.default_role
     await channel.set_permissions(role, send_messages=False)
     await ctx.send(f"{channel.mention} has been locked down")
+
 
 @bot.slash_command()
 @commands.has_permissions(administrator=True)
@@ -346,10 +321,12 @@ async def unlock(ctx, channel: discord.TextChannel):
     await channel.set_permissions(role, send_messages=True)
     await ctx.send(f"{channel.mention} has been unlocked")
 
+
 @bot.slash_command()
 async def roll(ctx, sides: int):
     result = random.randint(1, sides)
     await ctx.send(f"Rolling a {sides}-sided dice... You rolled a {result}!")
+
 
 @bot.slash_command()
 async def howgay(ctx, member: discord.Member = None):
@@ -365,6 +342,7 @@ reddit = asyncpraw.Reddit(
     user_agent='duziy bot',
 )
 
+
 @bot.slash_command()
 async def meme(ctx):
     subreddit_name = 'memes'
@@ -379,6 +357,7 @@ async def meme(ctx):
     embed.set_image(url=url)
     await ctx.send(embed=embed)
 
+
 @bot.slash_command()
 async def advice(ctx):
     url = 'https://api.adviceslip.com/advice'
@@ -388,6 +367,7 @@ async def advice(ctx):
         await ctx.send(advice)
     else:
         await ctx.send('Oops, something went wrong. Please try again later.')
+
 
 @bot.slash_command()
 async def help(ctx):
