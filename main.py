@@ -5,7 +5,7 @@ import os
 import requests
 import random
 import asyncio
-import asyncpraw
+import aiohttp
 import re
 from discord.ext import commands
 from pathlib import Path
@@ -239,7 +239,6 @@ async def math(ctx, *, expression: str):
 async def ping(ctx):
     await ctx.respond(f'Pong! {round(bot.latency * 1000)}ms')
 
-
 @bot.slash_command()
 @commands.has_permissions(manage_messages=True)
 async def announce(ctx, *, message=None):
@@ -368,26 +367,20 @@ async def howgay(ctx, member: discord.Member = None):
     gay_percent = random.randint(0, 100)
     await ctx.send(f"{member.mention} is {gay_percent}% gay 🏳️‍🌈")
 
-client = discord.Client()
-reddit = asyncpraw.Reddit(
-    client_id='BidTgjqMzuCIAG0VAQaC5g',
-    client_secret='ICLztB-C7vFra9-XFPBLuWbcr1XIBA',
-    user_agent='duziy bot',
-)
-
-@bot.slash_command()
+@bot.slash_command(name="meme", description="Get a random meme from Imgur!")
 async def meme(ctx):
-    subreddit_name = 'memes'
-    subreddit = await reddit.subreddit(subreddit_name)
-    all_posts = []
-    async for post in subreddit.hot(limit=50):
-        all_posts.append(post)
-    random_post = random.choice(all_posts)
-    title = random_post.title
-    url = random_post.url
-    embed = discord.Embed(title=title)
-    embed.set_image(url=url)
-    await ctx.send(embed=embed)
+    async with aiohttp.ClientSession() as session:
+        async with session.get("https://www.reddit.com/r/memes/random/.json") as response:
+            if response.status == 200:
+                meme_data = await response.json()
+                meme_url = meme_data[0]["data"]["children"][0]["data"]["url"]
+                
+                embed = discord.Embed(title="Random Meme")
+                embed.set_image(url=meme_url)
+                
+                await ctx.send(embed=embed)
+            else:
+                await ctx.send("Failed to fetch a meme. Please try again later.")
 
 @bot.slash_command()
 async def advice(ctx):
@@ -398,6 +391,9 @@ async def advice(ctx):
         await ctx.send(advice)
     else:
         await ctx.send('Oops, something went wrong. Please try again later.')
+
+###########################################################
+# Help Command
 
 @bot.slash_command()
 async def help(ctx):
@@ -449,7 +445,7 @@ async def help(ctx):
     message = await ctx.send(embed=embed)
     await message.add_reaction("◀️")
     await message.add_reaction("▶️")
-    await message.add_reaction("❌")  # Add cancel reaction
+    await message.add_reaction("❌")
 
     def check(reaction, user):
         return user == ctx.author and str(reaction.emoji) in ["◀️", "▶️", "❌"]
@@ -473,7 +469,7 @@ async def help(ctx):
                 await message.remove_reaction(reaction, user)
 
             elif str(reaction.emoji) == "❌":
-                await message.delete()  # Delete the message
+                await message.delete()
                 break
 
             else:
