@@ -12,7 +12,6 @@ from pathlib import Path
 
 intents = discord.Intents.default()
 intents.members = True
-
 bot = commands.Bot(intents=intents)
 
 if os.path.exists(os.getcwd() + "/config.json"):
@@ -65,16 +64,13 @@ async def on_application_command_error(ctx, error):
 dir_path = Path(__file__).parent.absolute()
 channels_file = dir_path / "channels.json"
 
-
 def load_channels():
     with open(channels_file, 'r') as f:
         return json.load(f)
 
-
 def save_channels(channels):
     with open(channels_file, 'w') as f:
         json.dump(channels, f, indent=4)
-
 
 def create_config(guild_id):
     channels = load_channels()
@@ -83,12 +79,32 @@ def create_config(guild_id):
                               "join_message": "Welcome {user} to the server! You are the {member_count}th member.", "leave_message": "Goodbye {user}!"}
         save_channels(channels)
 
-
 @bot.event
 async def on_guild_join(guild):
     guild_id = str(guild.id)
     create_config(guild_id)
 
+def validate_channels_data(data):
+    if not isinstance(data, dict):
+        raise ValueError("Invalid channels data format. Expected a dictionary.")
+    
+    for guild_id, guild_data in data.items():
+        if not isinstance(guild_data, dict):
+            raise ValueError(f"Invalid data format for guild {guild_id}. Expected a dictionary.")
+        
+        if "join_message" not in guild_data:
+            raise ValueError(f"Missing 'join_message' key for guild {guild_id}.")
+        
+        if "leave_message" not in guild_data:
+            raise ValueError(f"Missing 'leave_message' key for guild {guild_id}.")
+        
+        if "join" not in guild_data:
+            raise ValueError(f"Missing 'join' key for guild {guild_id}.")
+        
+        if "leave" not in guild_data:
+            raise ValueError(f"Missing 'leave' key for guild {guild_id}.")
+    
+    return data
 
 @bot.slash_command(name="setjoinchannel", description="Set join channel for the bot.")
 @commands.has_permissions(manage_messages=True)
@@ -110,7 +126,6 @@ async def setleavechannel(ctx, channel: discord.TextChannel):
     save_channels(channels)
     await ctx.send(f"Leave channel set to {channel.mention}")
 
-
 @bot.slash_command(name="setjoinmessage", description="Set join message for the bot.")
 @commands.has_permissions(manage_messages=True)  # Replace with the appropriate permission(s)
 async def setjoinmessage(ctx, message: str):
@@ -131,7 +146,6 @@ async def setleavemessage(ctx, message: str):
     save_channels(channels)
     await ctx.send(f"Leave message set to '{message}'")
 
-
 @bot.event
 async def on_member_join(member):
     channels = load_channels()
@@ -147,7 +161,6 @@ async def on_member_join(member):
             "{member_count}", str(member_count))
         await welcome_channel.send(join_message)
 
-
 @bot.event
 async def on_member_remove(member):
     channels = load_channels()
@@ -160,14 +173,42 @@ async def on_member_remove(member):
             "{count}", str(member.guild.member_count))
         await leave_channel.send(leave_message)
 
+###########################################################
+# mute command
 
-##########################################################
+@bot.slash_command()
+@commands.has_permissions(manage_roles=True)
+async def mute(ctx, member: discord.Member, *, reason="No reason provided."):
+    mute_role = discord.utils.get(ctx.guild.roles, name="Muted")
+
+    if not mute_role:
+        # If the Muted role doesn't exist, create it
+        mute_role = await ctx.guild.create_role(name="Muted")
+
+        # Update permissions for channels
+        for channel in ctx.guild.channels:
+            await channel.set_permissions(mute_role, send_messages=False)
+
+    await member.add_roles(mute_role, reason=reason)
+    await ctx.send(f"{member.mention} has been muted. Reason: {reason}")
+
+@bot.slash_command()
+@commands.has_permissions(manage_roles=True)
+async def unmute(ctx, member: discord.Member):
+    mute_role = discord.utils.get(ctx.guild.roles, name="Muted")
+
+    if mute_role in member.roles:
+        await member.remove_roles(mute_role)
+        await ctx.send(f"{member.mention} has been unmuted.")
+    else:
+        await ctx.send(f"{member.mention} is not muted.")
+
+###########################################################
 
 @bot.slash_command()
 async def hello(ctx):
     await ctx.send(f'Hello, I am a bot made by the one and only duziy!')
     return
-
 
 @bot.slash_command(name="math", description="Performs basic math operations.")
 async def math(ctx, *, expression: str):
@@ -193,7 +234,6 @@ async def math(ctx, *, expression: str):
         await ctx.send(f"Result: {result}")
     except Exception as e:
         await ctx.send(f"Error: {str(e)}")
-
 
 @bot.slash_command()
 async def ping(ctx):
@@ -252,7 +292,6 @@ async def unban(ctx, user: discord.User):
     embed = discord.Embed(description=f"{user} has been unbanned")
     await ctx.send(embed=embed)
 
-
 @bot.slash_command()
 async def dadjoke(ctx):
     url = "https://icanhazdadjoke.com/"
@@ -271,7 +310,6 @@ async def cat(ctx):
     embed.set_image(url=data['url'])
     await ctx.send(embed=embed)
 
-
 @bot.slash_command()
 async def dog(ctx):
     url = "https://dog.ceo/api/breeds/image/random"
@@ -280,7 +318,6 @@ async def dog(ctx):
     embed = discord.Embed(title="Here's a dog!")
     embed.set_image(url=data)
     await ctx.send(embed=embed)
-
 
 @bot.slash_command()
 async def eightball(ctx, *, question):
@@ -305,14 +342,12 @@ async def eightball(ctx, *, question):
     response = random.choice(responses)
     await ctx.send(f"🎱 Question: {question}\n🎱 Answer: {response}")
 
-
 @bot.slash_command()
 @commands.has_permissions(administrator=True)
 async def lockdown(ctx, channel: discord.TextChannel):
     role = ctx.guild.default_role
     await channel.set_permissions(role, send_messages=False)
     await ctx.send(f"{channel.mention} has been locked down")
-
 
 @bot.slash_command()
 @commands.has_permissions(administrator=True)
@@ -321,12 +356,10 @@ async def unlock(ctx, channel: discord.TextChannel):
     await channel.set_permissions(role, send_messages=True)
     await ctx.send(f"{channel.mention} has been unlocked")
 
-
 @bot.slash_command()
 async def roll(ctx, sides: int):
     result = random.randint(1, sides)
     await ctx.send(f"Rolling a {sides}-sided dice... You rolled a {result}!")
-
 
 @bot.slash_command()
 async def howgay(ctx, member: discord.Member = None):
@@ -342,7 +375,6 @@ reddit = asyncpraw.Reddit(
     user_agent='duziy bot',
 )
 
-
 @bot.slash_command()
 async def meme(ctx):
     subreddit_name = 'memes'
@@ -357,7 +389,6 @@ async def meme(ctx):
     embed.set_image(url=url)
     await ctx.send(embed=embed)
 
-
 @bot.slash_command()
 async def advice(ctx):
     url = 'https://api.adviceslip.com/advice'
@@ -367,7 +398,6 @@ async def advice(ctx):
         await ctx.send(advice)
     else:
         await ctx.send('Oops, something went wrong. Please try again later.')
-
 
 @bot.slash_command()
 async def help(ctx):
