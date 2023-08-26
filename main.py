@@ -174,10 +174,10 @@ async def on_member_remove(member):
         await leave_channel.send(leave_message)
 
 ###########################################################
-# mute command
+# Mute command
 
 @bot.slash_command()
-@commands.has_permissions(manage_roles=True)
+@commands.has_permissions(moderate_members=True)
 async def mute(ctx, member: discord.Member, *, reason="No reason provided."):
     mute_role = discord.utils.get(ctx.guild.roles, name="Muted")
 
@@ -193,7 +193,7 @@ async def mute(ctx, member: discord.Member, *, reason="No reason provided."):
     await ctx.send(f"{member.mention} has been muted. Reason: {reason}")
 
 @bot.slash_command()
-@commands.has_permissions(manage_roles=True)
+@commands.has_permissions(moderate_members=True)
 async def unmute(ctx, member: discord.Member):
     mute_role = discord.utils.get(ctx.guild.roles, name="Muted")
 
@@ -422,6 +422,8 @@ async def help(ctx):
         `/lockdown [channel]`: Locks down the specified channel (requires Administrator permission).
         `/unlock [channel]`: Unlocks the specified channel (requires Administrator permission).
         `/clear [amount]`: Clears the specified amount of messages in the current channel (requires Manage Messages permission).
+        `/mute [user]` : Makes it to that the user can not talk in any channels (requires Timeout permission).
+        `/unmute [user]` : Makes it to that the user able to talk in any channels again (requires Timeout permission). 
         ''',
 
         '''
