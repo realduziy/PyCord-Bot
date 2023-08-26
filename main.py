@@ -11,7 +11,10 @@ from discord.ext import commands
 from pathlib import Path
 import itertools
 
+intents = discord.Intents.default()
+intents.members = True
 bot = commands.Bot()
+
 
 if os.path.exists(os.getcwd() + "/config.json"):
     with open("./config.json") as f:
@@ -162,6 +165,35 @@ async def on_raw_member_remove(member):
                 "{count}", str(member.guild.member_count))
             await leave_channel.send(leave_message)
 
+# mute command
+
+@bot.slash_command()
+@commands.has_permissions(manage_roles=True)
+async def mute(ctx, member: discord.Member, *, reason="No reason provided."):
+    mute_role = discord.utils.get(ctx.guild.roles, name="Muted")
+
+    if not mute_role:
+        # If the Muted role doesn't exist, create it
+        mute_role = await ctx.guild.create_role(name="Muted")
+
+        # Update permissions for channels
+        for channel in ctx.guild.channels:
+            await channel.set_permissions(mute_role, send_messages=False)
+
+    await member.add_roles(mute_role, reason=reason)
+    await ctx.send(f"{member.mention} has been muted. Reason: {reason}")
+
+@bot.slash_command()
+@commands.has_permissions(manage_roles=True)
+async def unmute(ctx, member: discord.Member):
+    mute_role = discord.utils.get(ctx.guild.roles, name="Muted")
+
+    if mute_role in member.roles:
+        await member.remove_roles(mute_role)
+        await ctx.send(f"{member.mention} has been unmuted.")
+    else:
+        await ctx.send(f"{member.mention} is not muted.")
+
 ##########################################################
 
 @bot.slash_command()
@@ -200,71 +232,56 @@ async def ping(ctx):
     await ctx.respond(f'Pong! {round(bot.latency * 1000)}ms')
 
 @bot.slash_command()
+@commands.has_permissions(manage_messages=True)
 async def announce(ctx, *, message=None):
     if message is None:
-        await ctx.send("Please provide a message to announce.")
-        return
-
-    if not ctx.author.guild_permissions.manage_messages:
-        await ctx.send("You do not have permission to use this command.")
-        return
-
+        raise commands.MissingRequiredArgument
     embed = discord.Embed(title="", description=message, color=0xFF0000)
     embed.set_footer(text=f"Announced by {ctx.author.name}")
-
     await ctx.send(embed=embed)
 
 @bot.slash_command(name="clear", description="Clears the specified number of messages in the channel.")
+@commands.has_permissions(manage_messages=True)
 async def clear(ctx, amount: int):
-    if not ctx.author.guild_permissions.manage_messages:
-        await ctx.send('You do not have permission to use this command.')
-        return
     if amount < 1 or amount > 100:
-        await ctx.send('You can only clear between 1 and 100 messages at a time!')
-        return
+        raise commands.BadArgument
     deleted = await ctx.channel.purge(limit=amount)
     msg = await ctx.send(f'Cleared {len(deleted)} messages.')
     await asyncio.sleep(5)  # wait for 5 seconds
     await msg.delete()  # delete the bot's message after 5 seconds
 
 @bot.slash_command()
+@commands.has_permissions(kick_members=True)
 async def kick(ctx, user: discord.User):
     guild = ctx.guild
-    embed = discord.Embed(description=f"{user} has been kicked")
-    if not ctx.author.guild_permissions.kick_members:
-        await ctx.send('You do not have permission to use this command.')
-        return
     try:
         await guild.kick(user=user)
     except discord.errors.NotFound:
         pass
+    embed = discord.Embed(description=f"{user} has been kicked")
     await ctx.send(embed=embed)
 
 @bot.slash_command()
+@commands.has_permissions(ban_members=True)
 async def ban(ctx, user: discord.User):
     guild = ctx.guild
-    embed = discord.Embed(description=f"{user} has been banned")
-    if not ctx.author.guild_permissions.ban_members:
-        await ctx.send('You do not have permission to use this command.')
-        return
     try:
         await guild.ban(user=user)
     except discord.errors.NotFound:
         pass
+    embed = discord.Embed(description=f"{user} has been banned")
     await ctx.send(embed=embed)
 
 @bot.slash_command()
+@commands.has_permissions(ban_members=True)
 async def unban(ctx, user: discord.User):
-  guild = ctx.guild
-  mbed = discord.Embed(
-      description=f"{user} has been unbanned"
-  )
-  if (not ctx.author.guild_permissions.ban_members):
-    await ctx.send('You do not have permission to use this command.')
-    return
-  if ctx.author.guild_permissions.ban_members:
-    await ctx.send(embed=mbed)
-    await guild.unban(user=user)
+    guild = ctx.guild
+    try:
+        await guild.unban(user=user)
+    except discord.errors.NotFound:
+        pass
+    embed = discord.Embed(description=f"{user} has been unbanned")
+    await ctx.send(embed=embed)
 
 @bot.slash_command()
 async def dadjoke(ctx):
