@@ -24,8 +24,6 @@ py -m pip install aiohttp
 
 py -m pip install python-dotenv
 
-py -m pip install dotenv
-
 If you find a bug feel free to let me know via Discord or via an issue request but do note that I may not fix it for some time as I dont update this often.
 
 Note:
