@@ -9,21 +9,11 @@ import aiohttp
 import re
 from discord.ext import commands
 from pathlib import Path
+import dotenv
+dotenv.load_dotenv()
+token = str(os.getenv("TOKEN"))
 
-intents = discord.Intents.default()
-intents.members = True
-bot = commands.Bot(intents=intents)
-
-if os.path.exists(os.getcwd() + "/config.json"):
-    with open("./config.json") as f:
-        configData = json.load(f)
-else:
-    configTemplate = {"Token": ""}
-    with open(os.getcwd() + "/config.json", "w+") as f:
-        json.dump(configTemplate, f)
-
-token = configData["Token"]
-
+bot = discord.Bot()
 
 async def on_ready():
  await bot.wait_until_ready()
