@@ -9,10 +9,18 @@ What is PyCord-Bot?
 PyCord-Bot is a simple multipurpose discord bot coded in Python.
 
 The main library that is being used is Py-Cord. 
-You can view it at https://github.com/Pycord-Development/pycord or install it via this command: 
-py -3 -m pip install git+https://github.com/Pycord-Development/pycord
 
-All of the pip installs I am using should be, discord, discord-bridge, asyncio, asyncpraw, aiohttp, and if I'm missing one feel free to let me know via discord or create an issue request, and I'll take a look into it. 
+You can view it at https://github.com/Pycord-Development/pycord or install it via this command: 
+
+py -m pip install py-cord
+
+You will also need to install these packeges, you can install them with the following commands, 
+
+py -m pip install discord 
+
+py -m pip install requests
+
+py -m pip install aiohttp
 
 If you find a bug feel free to let me know via Discord or via an issue request but do note that I may not fix it for some time as I dont update this often.
 
