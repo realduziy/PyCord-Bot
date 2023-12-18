@@ -9,24 +9,27 @@ import aiohttp
 import re
 from discord.ext import commands
 from pathlib import Path
-import dotenv
-dotenv.load_dotenv()
-token = str(os.getenv("TOKEN"))
+from dotenv import load_dotenv
+load_dotenv()
+token = os.getenv("TOKEN")
 
-bot = discord.Bot()
+intents = discord.Intents.default()
+intents.members = True
+bot = commands.Bot(intents=intents)
 
+@bot.event
 async def on_ready():
- await bot.wait_until_ready()
+    await bot.wait_until_ready()
 
- statuses = [f"listening on {len(bot.guilds)} server's", "Need help? do /help"]
+    statuses = [f"listening on {len(bot.guilds)} server's", "Need help? do /help"]
 
- while not bot.is_closed():
+    while not bot.is_closed():
 
-   status = random.choice(statuses)
+        status = random.choice(statuses)
 
-   await bot.change_presence(activity=discord.Game(name=status))
+        await bot.change_presence(activity=discord.Game(name=status))
 
-   await asyncio.sleep(5)
+        await asyncio.sleep(5)
 
 bot.loop.create_task(on_ready())
 print("Bot is ready!")
@@ -136,13 +139,14 @@ async def setleavemessage(ctx, message: str):
     save_channels(channels)
     await ctx.send(f"Leave message set to '{message}'")
 
+# Convert channel IDs to integers when retrieving them
 @bot.event
 async def on_member_join(member):
     channels = load_channels()
-    if str(member.guild.id) in channels and channels[str(member.guild.id)]["join"] is not None:
-        welcome_channel = bot.get_channel(
-            channels[str(member.guild.id)]["join"])
-        join_message = channels[str(member.guild.id)].get(
+    guild_id = str(member.guild.id)
+    if guild_id in channels and channels[guild_id]["join"] is not None:
+        welcome_channel = bot.get_channel(int(channels[guild_id]["join"]))
+        join_message = channels[guild_id].get(
             "join_message", "Welcome {user} to the server! You are the {member_count} member to join.")
         join_message = join_message.replace("{user}", member.mention)
         member_count = sum(
@@ -156,7 +160,7 @@ async def on_member_remove(member):
     channels = load_channels()
     guild_id = str(member.guild.id)
     if guild_id in channels and channels[guild_id]["leave"] is not None:
-        leave_channel = bot.get_channel(channels[guild_id]["leave"])
+        leave_channel = bot.get_channel(int(channels[guild_id]["leave"]))
         leave_message = channels[guild_id].get(
             "leave_message", "Goodbye {user}! We are now {count} members.")
         leave_message = leave_message.replace("{user}", member.mention).replace(
