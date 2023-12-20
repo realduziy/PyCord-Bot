@@ -37,7 +37,7 @@ print("Bot is ready!")
 ##########################################################
 
 @bot.event
-async def on_application_command_error(ctx, error):
+async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandOnCooldown):
         await ctx.respond(f"You are on cooldown. Try again in {error.retry_after:.2f}s.", delete_after=10)
     elif isinstance(error, commands.NoPrivateMessage):
@@ -245,12 +245,27 @@ async def announce(ctx, *, message=None):
 @bot.slash_command(name="clear", description="Clears the specified number of messages in the channel.")
 @commands.has_permissions(manage_messages=True)
 async def clear(ctx, amount: int):
-    if amount < 1 or amount > 100:
-        raise commands.BadArgument
-    deleted = await ctx.channel.purge(limit=amount)
-    msg = await ctx.send(f'Cleared {len(deleted)} messages.')
-    await asyncio.sleep(5)  # wait for 5 seconds
-    await msg.delete()  # delete the bot's message after 5 seconds
+    try:
+        if amount < 1 or amount > 100:
+            raise commands.BadArgument("Amount must be between 1 and 100.")
+
+        # Purge messages
+        deleted = await ctx.channel.purge(limit=amount)
+
+        # Send a follow-up message to indicate successful deletion
+        response_msg = await ctx.send(f'Cleared {len(deleted)} messages.')
+
+        # Wait for a short duration
+        await asyncio.sleep(5)
+
+        # Delete the follow-up message
+        await response_msg.delete()
+    except commands.BadArgument as e:
+        await ctx.respond(str(e))
+    except discord.Forbidden:
+        await ctx.respond("I don't have permission to delete messages.")
+
+
 
 @bot.slash_command()
 @commands.has_permissions(kick_members=True)
