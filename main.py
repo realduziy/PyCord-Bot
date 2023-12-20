@@ -120,7 +120,7 @@ async def setleavechannel(ctx, channel: discord.TextChannel):
     await ctx.send(f"Leave channel set to {channel.mention}")
 
 @bot.slash_command(name="setjoinmessage", description="Set join message for the bot.")
-@commands.has_permissions(manage_messages=True)  # Replace with the appropriate permission(s)
+@commands.has_permissions(manage_messages=True)
 async def setjoinmessage(ctx, message: str):
     guild_id = str(ctx.guild.id)
     create_config(guild_id)
@@ -139,7 +139,7 @@ async def setleavemessage(ctx, message: str):
     save_channels(channels)
     await ctx.send(f"Leave message set to '{message}'")
 
-# Convert channel IDs to integers when retrieving them
+
 @bot.event
 async def on_member_join(member):
     channels = load_channels()
@@ -176,10 +176,9 @@ async def mute(ctx, member: discord.Member, *, reason="No reason provided."):
     mute_role = discord.utils.get(ctx.guild.roles, name="Muted")
 
     if not mute_role:
-        # If the Muted role doesn't exist, create it
+
         mute_role = await ctx.guild.create_role(name="Muted")
 
-        # Update permissions for channels
         for channel in ctx.guild.channels:
             await channel.set_permissions(mute_role, send_messages=False)
 
@@ -207,10 +206,9 @@ async def hello(ctx):
 @bot.slash_command(name="math", description="Performs basic math operations.")
 async def math(ctx, *, expression: str):
     try:
-        # Split input expression into separate operations
+
         operations = re.findall(r'\d+\s*[+\-*/]\s*\d+', expression)
 
-        # Evaluate each operation and accumulate the result
         result = 0
         for op in operations:
             num1, operator, num2 = re.findall(
@@ -242,30 +240,24 @@ async def announce(ctx, *, message=None):
     embed.set_footer(text=f"Announced by {ctx.author.name}")
     await ctx.send(embed=embed)
 
-@bot.slash_command(name="clear", description="Clears the specified number of messages in the channel.")
+@bot.slash_command()
 @commands.has_permissions(manage_messages=True)
 async def clear(ctx, amount: int):
     try:
         if amount < 1 or amount > 100:
             raise commands.BadArgument("Amount must be between 1 and 100.")
 
-        # Purge messages
         deleted = await ctx.channel.purge(limit=amount)
 
-        # Send a follow-up message to indicate successful deletion
         response_msg = await ctx.send(f'Cleared {len(deleted)} messages.')
 
-        # Wait for a short duration
         await asyncio.sleep(5)
 
-        # Delete the follow-up message
         await response_msg.delete()
     except commands.BadArgument as e:
         await ctx.respond(str(e))
     except discord.Forbidden:
         await ctx.respond("I don't have permission to delete messages.")
-
-
 
 @bot.slash_command()
 @commands.has_permissions(kick_members=True)
