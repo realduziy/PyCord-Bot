@@ -300,7 +300,6 @@ async def dadjoke(ctx):
     joke = response.json()['joke']
     await ctx.send(joke)
 
-
 @bot.slash_command()
 async def cat(ctx):
     url = "https://api.thecatapi.com/v1/images/search"
@@ -346,14 +345,18 @@ async def eightball(ctx, *, question):
 @commands.has_permissions(administrator=True)
 async def lockdown(ctx, channel: discord.TextChannel):
     role = ctx.guild.default_role
-    await channel.set_permissions(role, send_messages=False)
+    permissions = channel.overwrites_for(role)
+    permissions.send_messages = False
+    await channel.set_permissions(role, overwrite=permissions)
     await ctx.send(f"{channel.mention} has been locked down")
 
 @bot.slash_command()
 @commands.has_permissions(administrator=True)
 async def unlock(ctx, channel: discord.TextChannel):
     role = ctx.guild.default_role
-    await channel.set_permissions(role, send_messages=True)
+    permissions = channel.overwrites_for(role)
+    permissions.send_messages = True
+    await channel.set_permissions(role, overwrite=permissions)
     await ctx.send(f"{channel.mention} has been unlocked")
 
 @bot.slash_command()
@@ -453,7 +456,7 @@ async def help(ctx):
 
     while True:
         try:
-            reaction, user = await bot.wait_for("reaction_add", timeout=30, check=check)
+            reaction, user = await bot.wait_for("reaction_add", timeout=40, check=check)
 
             if str(reaction.emoji) == "▶️" and cur_page < pages - 1:
                 cur_page += 1
