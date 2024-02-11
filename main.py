@@ -203,8 +203,8 @@ async def unmute(ctx, member: discord.Member):
 
 @bot.hybrid_command()
 async def hello(ctx):
-    await ctx.send(f'Hello, I am a bot made by the one and only duziy!')
-    return
+    await ctx.send(f'Hello, I am a bot made by the one and only duziy!', ephemeral=True)
+
 
 @bot.hybrid_command(name="math", description="Performs basic math operations.")
 async def math(ctx, *, expression: str):
@@ -232,7 +232,7 @@ async def math(ctx, *, expression: str):
 
 @bot.hybrid_command()
 async def ping(ctx):
-    await ctx.send(f'Pong! {round(bot.latency * 1000)}ms')
+    await ctx.send(f'Pong! {round(bot.latency * 1000)}ms', ephemeral=True)
 
 @bot.hybrid_command()
 @commands.has_permissions(manage_messages=True)
