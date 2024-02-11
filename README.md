@@ -8,7 +8,7 @@ What is PyCord-Bot?
 
 PyCord-Bot is a simple multipurpose discord bot coded in Python.
 
-The main library that is being used is Py-Cord. 
+The main library that is being used is Discord.py. 
 
 You can view it at https://github.com/Rapptz/discord.py or install it via this command: 
 
