@@ -18,19 +18,12 @@ bot = commands.Bot(command_prefix='.', intents=intents)
 
 @bot.event
 async def on_ready():
-    await bot.wait_until_ready()
 
-    statuses = [f"listening on {len(bot.guilds)} server's", "Need help? do /help"]
+    await bot.change_presence(status=discord.Status.online, activity=discord.Game("Need help do /help"))
 
-    while not bot.is_closed():
+    await asyncio.sleep(10)
 
-        status = random.choice(statuses)
-
-        await bot.change_presence(activity=discord.Game(name=status))
-
-        await asyncio.sleep(5)
-
-    bot.loop.create_task(on_ready)
+    await bot.change_presence(status=discord.Status.online, activity=discord.Streaming(name="Minecraft", url="https://youtube.com/duziy/live"))
 
 print("Bot is ready!")
 
@@ -141,7 +134,6 @@ async def setleavemessage(ctx, message: str):
     channels[guild_id]["leave_message"] = message
     save_channels(channels)
     await ctx.send(f"Leave message set to '{message}'")
-
 
 @bot.event
 async def on_member_join(member):
