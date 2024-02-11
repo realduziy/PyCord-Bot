@@ -13,9 +13,8 @@ from dotenv import load_dotenv
 load_dotenv()
 token = os.getenv("TOKEN")
 
-intents = discord.Intents.default()
-intents.members = True
-bot = commands.Bot(intents=intents)
+intents = discord.Intents.all()
+bot = commands.Bot(command_prefix='.', intents=intents)
 
 @bot.event
 async def on_ready():
@@ -31,7 +30,8 @@ async def on_ready():
 
         await asyncio.sleep(5)
 
-bot.loop.create_task(on_ready())
+    bot.loop.create_task(on_ready)
+
 print("Bot is ready!")
 
 ##########################################################
@@ -99,7 +99,7 @@ def validate_channels_data(data):
     
     return data
 
-@bot.slash_command(name="setjoinchannel", description="Set join channel for the bot.")
+@bot.hybrid_command(name="setjoinchannel", description="Set join channel for the bot.")
 @commands.has_permissions(manage_messages=True)
 async def setjoinchannel(ctx, channel: discord.TextChannel):
     guild_id = str(ctx.guild.id)
@@ -109,7 +109,7 @@ async def setjoinchannel(ctx, channel: discord.TextChannel):
     save_channels(channels)
     await ctx.send(f"Join channel set to {channel.mention}")
 
-@bot.slash_command(name="setleavechannel", description="Set leave channel for the bot.")
+@bot.hybrid_command(name="setleavechannel", description="Set leave channel for the bot.")
 @commands.has_permissions(manage_messages=True)
 async def setleavechannel(ctx, channel: discord.TextChannel):
     guild_id = str(ctx.guild.id)
@@ -119,7 +119,7 @@ async def setleavechannel(ctx, channel: discord.TextChannel):
     save_channels(channels)
     await ctx.send(f"Leave channel set to {channel.mention}")
 
-@bot.slash_command(name="setjoinmessage", description="Set join message for the bot.")
+@bot.hybrid_command(name="setjoinmessage", description="Set join message for the bot.")
 @commands.has_permissions(manage_messages=True)
 async def setjoinmessage(ctx, message: str):
     guild_id = str(ctx.guild.id)
@@ -129,7 +129,7 @@ async def setjoinmessage(ctx, message: str):
     save_channels(channels)
     await ctx.send(f"Join message set to '{message}'")
 
-@bot.slash_command(name="setleavemessage", description="Set leave message for the bot.")
+@bot.hybrid_command(name="setleavemessage", description="Set leave message for the bot.")
 @commands.has_permissions(manage_messages=True)  # Replace with the appropriate permission(s)
 async def setleavemessage(ctx, message: str):
     guild_id = str(ctx.guild.id)
@@ -170,7 +170,7 @@ async def on_member_remove(member):
 ###########################################################
 # Mute command
 
-@bot.slash_command()
+@bot.hybrid_command()
 @commands.has_permissions(moderate_members=True)
 async def mute(ctx, member: discord.Member, *, reason="No reason provided."):
     mute_role = discord.utils.get(ctx.guild.roles, name="Muted")
@@ -185,7 +185,7 @@ async def mute(ctx, member: discord.Member, *, reason="No reason provided."):
     await member.add_roles(mute_role, reason=reason)
     await ctx.send(f"{member.mention} has been muted. Reason: {reason}")
 
-@bot.slash_command()
+@bot.hybrid_command()
 @commands.has_permissions(moderate_members=True)
 async def unmute(ctx, member: discord.Member):
     mute_role = discord.utils.get(ctx.guild.roles, name="Muted")
@@ -198,12 +198,12 @@ async def unmute(ctx, member: discord.Member):
 
 ###########################################################
 
-@bot.slash_command()
+@bot.hybrid_command()
 async def hello(ctx):
     await ctx.send(f'Hello, I am a bot made by the one and only duziy!')
     return
 
-@bot.slash_command(name="math", description="Performs basic math operations.")
+@bot.hybrid_command(name="math", description="Performs basic math operations.")
 async def math(ctx, *, expression: str):
     try:
 
@@ -227,11 +227,11 @@ async def math(ctx, *, expression: str):
     except Exception as e:
         await ctx.send(f"Error: {str(e)}")
 
-@bot.slash_command()
+@bot.hybrid_command()
 async def ping(ctx):
     await ctx.respond(f'Pong! {round(bot.latency * 1000)}ms')
 
-@bot.slash_command()
+@bot.hybrid_command()
 @commands.has_permissions(manage_messages=True)
 async def announce(ctx, *, message=None):
     if message is None:
@@ -240,7 +240,7 @@ async def announce(ctx, *, message=None):
     embed.set_footer(text=f"Announced by {ctx.author.name}")
     await ctx.send(embed=embed)
 
-@bot.slash_command()
+@bot.hybrid_command()
 @commands.has_permissions(manage_messages=True)
 async def clear(ctx, amount: int):
     try:
@@ -259,7 +259,7 @@ async def clear(ctx, amount: int):
     except discord.Forbidden:
         await ctx.respond("I don't have permission to delete messages.")
 
-@bot.slash_command()
+@bot.hybrid_command()
 @commands.has_permissions(kick_members=True)
 async def kick(ctx, user: discord.User):
     guild = ctx.guild
@@ -270,7 +270,7 @@ async def kick(ctx, user: discord.User):
     embed = discord.Embed(description=f"{user} has been kicked")
     await ctx.send(embed=embed)
 
-@bot.slash_command()
+@bot.hybrid_command()
 @commands.has_permissions(ban_members=True)
 async def ban(ctx, user: discord.User):
     guild = ctx.guild
@@ -281,7 +281,7 @@ async def ban(ctx, user: discord.User):
     embed = discord.Embed(description=f"{user} has been banned")
     await ctx.send(embed=embed)
 
-@bot.slash_command()
+@bot.hybrid_command()
 @commands.has_permissions(ban_members=True)
 async def unban(ctx, user: discord.User):
     guild = ctx.guild
@@ -292,7 +292,7 @@ async def unban(ctx, user: discord.User):
     embed = discord.Embed(description=f"{user} has been unbanned")
     await ctx.send(embed=embed)
 
-@bot.slash_command()
+@bot.hybrid_command()
 async def dadjoke(ctx):
     url = "https://icanhazdadjoke.com/"
     headers = {"Accept": "application/json"}
@@ -300,7 +300,7 @@ async def dadjoke(ctx):
     joke = response.json()['joke']
     await ctx.send(joke)
 
-@bot.slash_command()
+@bot.hybrid_command()
 async def cat(ctx):
     url = "https://api.thecatapi.com/v1/images/search"
     response = requests.get(url)
@@ -309,7 +309,7 @@ async def cat(ctx):
     embed.set_image(url=data['url'])
     await ctx.send(embed=embed)
 
-@bot.slash_command()
+@bot.hybrid_command()
 async def dog(ctx):
     url = "https://dog.ceo/api/breeds/image/random"
     response = requests.get(url)
@@ -318,7 +318,7 @@ async def dog(ctx):
     embed.set_image(url=data)
     await ctx.send(embed=embed)
 
-@bot.slash_command()
+@bot.hybrid_command()
 async def eightball(ctx, *, question):
     responses = [
         "It is certain.",
@@ -341,7 +341,7 @@ async def eightball(ctx, *, question):
     response = random.choice(responses)
     await ctx.send(f"🎱 Question: {question}\n🎱 Answer: {response}")
 
-@bot.slash_command()
+@bot.hybrid_command()
 @commands.has_permissions(administrator=True)
 async def lockdown(ctx, channel: discord.TextChannel):
     role = ctx.guild.default_role
@@ -350,7 +350,7 @@ async def lockdown(ctx, channel: discord.TextChannel):
     await channel.set_permissions(role, overwrite=permissions)
     await ctx.send(f"{channel.mention} has been locked down")
 
-@bot.slash_command()
+@bot.hybrid_command()
 @commands.has_permissions(administrator=True)
 async def unlock(ctx, channel: discord.TextChannel):
     role = ctx.guild.default_role
@@ -359,19 +359,19 @@ async def unlock(ctx, channel: discord.TextChannel):
     await channel.set_permissions(role, overwrite=permissions)
     await ctx.send(f"{channel.mention} has been unlocked")
 
-@bot.slash_command()
+@bot.hybrid_command()
 async def roll(ctx, sides: int):
     result = random.randint(1, sides)
     await ctx.send(f"Rolling a {sides}-sided dice... You rolled a {result}!")
 
-@bot.slash_command()
+@bot.hybrid_command()
 async def howgay(ctx, member: discord.Member = None):
     if member is None:
         member = ctx.author
     gay_percent = random.randint(0, 100)
     await ctx.send(f"{member.mention} is {gay_percent}% gay 🏳️‍🌈")
 
-@bot.slash_command(name="meme", description="Get a random meme from Imgur!")
+@bot.hybrid_command(name="meme", description="Get a random meme from Imgur!")
 async def meme(ctx):
     async with aiohttp.ClientSession() as session:
         async with session.get("https://www.reddit.com/r/memes/random/.json") as response:
@@ -386,7 +386,7 @@ async def meme(ctx):
             else:
                 await ctx.send("Failed to fetch a meme. Please try again later.")
 
-@bot.slash_command()
+@bot.hybrid_command()
 async def advice(ctx):
     url = 'https://api.adviceslip.com/advice'
     response = requests.get(url)
@@ -399,88 +399,92 @@ async def advice(ctx):
 ###########################################################
 # Help Command
 
-@bot.slash_command()
-async def help(ctx):
-    contents = [
-        '''
-        **Utilities:**
+existing_help_command = bot.get_command("help")
 
-        `/ping`: Displays the bot's latency.
-        `/announce [message]`: Announces a message in the current channel (requires Manage Messages permission).
-        `/setjoinchannel [channel]`: Set the channel where join messages will be posted. Only users with admin permissions can use this command.
-        `/setleavechannel [channel]`: Set the channel where leave messages will be posted. Only users with admin permissions can use this command.
-        `/setjoinmessage [message]`: Set the message that will be posted when a user joins the server. Only users with admin permissions can use this command. You can include the user's mention by including `{user}` and `{number}` for what number of user that they are in the message.
-        `/setleavemessage [message]`: Set the message that will be posted when a user leaves the server. Only users with admin permissions can use this command. You can include the user's mention by including `{user}` and `{number}` for what number of user that they are in the message.
-        ''',
+if existing_help_command:
+    bot.remove_command("help")
+    @bot.hybrid_command()
+    async def help(ctx):
+        contents = [
+            '''
+            **Utilities:**
 
-        '''
-        **Moderation:**
+            `/ping`: Displays the bot's latency.
+            `/announce [message]`: Announces a message in the current channel (requires Manage Messages permission).
+            `/setjoinchannel [channel]`: Set the channel where join messages will be posted. Only users with admin permissions can use this command.
+            `/setleavechannel [channel]`: Set the channel where leave messages will be posted. Only users with admin permissions can use this command.
+            `/setjoinmessage [message]`: Set the message that will be posted when a user joins the server. Only users with admin permissions can use this command. You can include the user's mention by including `{user}` and `{number}` for what number of user that they are in the message.
+            `/setleavemessage [message]`: Set the message that will be posted when a user leaves the server. Only users with admin permissions can use this command. You can include the user's mention by including `{user}` and `{number}` for what number of user that they are in the message.
+            ''',
 
-        `/kick [user]`: Kicks the specified user from the server (requires Kick Members permission).
-        `/ban [user]`: Bans the specified user from the server (requires Ban Members permission).
-        `/unban [user]`: Unbans the specified user from the server (requires Ban Members permission).
-        `/lockdown [channel]`: Locks down the specified channel (requires Administrator permission).
-        `/unlock [channel]`: Unlocks the specified channel (requires Administrator permission).
-        `/clear [amount]`: Clears the specified amount of messages in the current channel (requires Manage Messages permission).
-        `/mute [user]` : Makes it to that the user can not talk in any channels (requires Timeout permission).
-        `/unmute [user]` : Makes it to that the user able to talk in any channels again (requires Timeout permission). 
-        ''',
+            '''
+            **Moderation:**
 
-        '''
-        **Fun:**
+            `/kick [user]`: Kicks the specified user from the server (requires Kick Members permission).
+            `/ban [user]`: Bans the specified user from the server (requires Ban Members permission).
+            `/unban [user]`: Unbans the specified user from the server (requires Ban Members permission).
+            `/lockdown [channel]`: Locks down the specified channel (requires Administrator permission).
+            `/unlock [channel]`: Unlocks the specified channel (requires Administrator permission).
+            `/clear [amount]`: Clears the specified amount of messages in the current channel (requires Manage Messages permission).
+            `/mute [user]` : Makes it to that the user can not talk in any channels (requires Timeout permission).
+            `/unmute [user]` : Makes it to that the user able to talk in any channels again (requires Timeout permission). 
+            ''',
 
-        `/hello`: Greets the user.
-        `/meme`: Fetches a random meme.
-        `/dadjoke`: Fetches a random dad joke.
-        `/cat`: Fetches a random picture of a cat.
-        `/dog`: Fetches a random picture of a dog.
-        `/eightball [question]`: Responds with a random 8ball response to the given question.
-        `/roll [number of sides]`: Rolls a dice with the specified number of sides.
-        `/math [your math question]`: Does simple math for you.
-        `/advice`: Gives you some random advice.
-        ''',
-    ]
+            '''
+            **Fun:**
 
-    pages = len(contents)
-    cur_page = 0
-    embed = discord.Embed(description=contents[cur_page], color=discord.Color.blurple())
-    embed.set_footer(text=f"Page {cur_page+1}/{pages}")
+            `/hello`: Greets the user.
+            `/meme`: Fetches a random meme.
+            `/dadjoke`: Fetches a random dad joke.
+            `/cat`: Fetches a random picture of a cat.
+            `/dog`: Fetches a random picture of a dog.
+            `/eightball [question]`: Responds with a random 8ball response to the given question.
+            `/roll [number of sides]`: Rolls a dice with the specified number of sides.
+            `/math [your math question]`: Does simple math for you.
+            `/advice`: Gives you some random advice.
+            ''',
+        ]
 
-    message = await ctx.send(embed=embed)
-    await message.add_reaction("◀️")
-    await message.add_reaction("▶️")
-    await message.add_reaction("❌")
+        pages = len(contents)
+        cur_page = 0
+        embed = discord.Embed(description=contents[cur_page], color=discord.Color.blurple())
+        embed.set_footer(text=f"Page {cur_page+1}/{pages}")
 
-    def check(reaction, user):
-        return user == ctx.author and str(reaction.emoji) in ["◀️", "▶️", "❌"]
+        message = await ctx.send(embed=embed)
+        await message.add_reaction("◀️")
+        await message.add_reaction("▶️")
+        await message.add_reaction("❌")
 
-    while True:
-        try:
-            reaction, user = await bot.wait_for("reaction_add", timeout=40, check=check)
+        def check(reaction, user):
+            return user == ctx.author and str(reaction.emoji) in ["◀️", "▶️", "❌"]
 
-            if str(reaction.emoji) == "▶️" and cur_page < pages - 1:
-                cur_page += 1
-                embed.description = contents[cur_page]
-                embed.set_footer(text=f"Page {cur_page+1}/{pages}")
-                await message.edit(embed=embed)
-                await message.remove_reaction(reaction, user)
+        while True:
+            try:
+                reaction, user = await bot.wait_for("reaction_add", timeout=40, check=check)
 
-            elif str(reaction.emoji) == "◀️" and cur_page > 0:
-                cur_page -= 1
-                embed.description = contents[cur_page]
-                embed.set_footer(text=f"Page {cur_page+1}/{pages}")
-                await message.edit(embed=embed)
-                await message.remove_reaction(reaction, user)
+                if str(reaction.emoji) == "▶️" and cur_page < pages - 1:
+                    cur_page += 1
+                    embed.description = contents[cur_page]
+                    embed.set_footer(text=f"Page {cur_page+1}/{pages}")
+                    await message.edit(embed=embed)
+                    await message.remove_reaction(reaction, user)
 
-            elif str(reaction.emoji) == "❌":
+                elif str(reaction.emoji) == "◀️" and cur_page > 0:
+                    cur_page -= 1
+                    embed.description = contents[cur_page]
+                    embed.set_footer(text=f"Page {cur_page+1}/{pages}")
+                    await message.edit(embed=embed)
+                    await message.remove_reaction(reaction, user)
+
+                elif str(reaction.emoji) == "❌":
+                    await message.delete()
+                    break
+
+                else:
+                    await message.remove_reaction(reaction, user)
+
+            except asyncio.TimeoutError:
                 await message.delete()
                 break
-
-            else:
-                await message.remove_reaction(reaction, user)
-
-        except asyncio.TimeoutError:
-            await message.delete()
-            break
 
 bot.run(token)
