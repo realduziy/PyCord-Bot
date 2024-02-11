@@ -39,17 +39,20 @@ print("Bot is ready!")
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandOnCooldown):
-        await ctx.respond(f"You are on cooldown. Try again in {error.retry_after:.2f}s.", delete_after=10)
+        await ctx.send(f"You are on cooldown. Try again in {error.retry_after:.2f}s.", delete_after=10)
     elif isinstance(error, commands.NoPrivateMessage):
         pass
     elif isinstance(error, commands.MissingPermissions):
-        await ctx.respond("You don't have permission to use this command.")
+        await ctx.send("You don't have permission to use this command.")
     elif isinstance(error, commands.NotOwner):
-        await ctx.respond("This command can only be used by the bot owner.")
+        await ctx.send("This command can only be used by the bot owner.")
     elif isinstance(error, commands.CheckFailure):
         pass
     else:
-        await ctx.respond("An error occurred while running the command. Please try again later.")
+        if ctx and ctx.valid:
+            await ctx.send("An error occurred while running the command. Please try again later.")
+        else:
+            print("Context is invalid or interaction is not available.")
         raise error
 
 ##########################################################
@@ -229,7 +232,7 @@ async def math(ctx, *, expression: str):
 
 @bot.hybrid_command()
 async def ping(ctx):
-    await ctx.respond(f'Pong! {round(bot.latency * 1000)}ms')
+    await ctx.send(f'Pong! {round(bot.latency * 1000)}ms')
 
 @bot.hybrid_command()
 @commands.has_permissions(manage_messages=True)
@@ -255,9 +258,9 @@ async def clear(ctx, amount: int):
 
         await response_msg.delete()
     except commands.BadArgument as e:
-        await ctx.respond(str(e))
+        await ctx.send(str(e))
     except discord.Forbidden:
-        await ctx.respond("I don't have permission to delete messages.")
+        await ctx.send("I don't have permission to delete messages.")
 
 @bot.hybrid_command()
 @commands.has_permissions(kick_members=True)
