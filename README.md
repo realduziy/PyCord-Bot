@@ -10,9 +10,9 @@ PyCord-Bot is a simple multipurpose discord bot coded in Python.
 
 The main library that is being used is Py-Cord. 
 
-You can view it at https://github.com/Pycord-Development/pycord or install it via this command: 
+You can view it at https://github.com/Rapptz/discord.py or install it via this command: 
 
-py -m pip install py-cord
+py -m pip install discord.py
 
 You will also need to install these packeges, you can install them with the following commands, 
 
