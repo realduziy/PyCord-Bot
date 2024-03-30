@@ -391,6 +391,14 @@ async def advice(ctx):
     else:
         await ctx.send('Oops, something went wrong. Please try again later.')
 
+@bot.hybrid_command()
+async def avatar(ctx, user: discord.User = None):
+    if user is None:
+        user = ctx.author
+    embed = discord.Embed(title=f"{user.name}'s Avatar")
+    embed.set_image(url=user.avatar.url)
+    await ctx.send(embed=embed)
+
 ###########################################################
 # Help Command
 
