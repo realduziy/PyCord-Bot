@@ -21,10 +21,6 @@ async def on_ready():
 
     await bot.change_presence(status=discord.Status.online, activity=discord.Game("Need help do /help"))
 
-    await asyncio.sleep(10)
-
-    await bot.change_presence(status=discord.Status.online, activity=discord.Streaming(name="Minecraft", url="https://youtube.com/duziy/live"))
-
 print("Bot is ready!")
 
 ##########################################################
