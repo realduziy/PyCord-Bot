@@ -38,13 +38,15 @@ async def on_command_error(ctx, error):
     elif isinstance(error, commands.CheckFailure):
         pass
     else:
-        if ctx and ctx.valid:
-            try:
-                await ctx.send("An error occurred while running the command. Please try again later.")
-            except discord.errors.NotFound:
-                print("Interaction not found.")
-        else:
-            print("Context is invalid or interaction is not available.")
+        message = "An error occurred while running the command. Please try again later."
+        print(f"An error occurred: {error}")
+        try:
+            if isinstance(ctx, discord.InteractionContext):
+                await ctx.response.send_message(message)
+            else:
+                await ctx.send(message)
+        except Exception as e:
+            print(f"An error occurred while handling command error: {e}")
         raise error
 
 ##########################################################
@@ -234,23 +236,14 @@ async def announce(ctx, *, message=None):
     embed.set_footer(text=f"Announced by {ctx.author.name}")
     await ctx.send(embed=embed)
 
-@bot.hybrid_command()
+@bot.hybrid_command(name="clear", description="Clears the specified amount of messages.")
 @commands.has_permissions(manage_messages=True)
 async def clear(ctx, amount: int):
-    try:
-        if amount < 1 or amount > 100:
-            raise commands.BadArgument("Amount must be between 1 and 100.")
-        deleted = await ctx.channel.purge(limit=amount)
-        message = f'Cleared {len(deleted)} messages.'
-        if ctx.response:
-            await ctx.send(message)
-        else:
-            print(message)  # Output to console if interaction context is not available
-    except commands.BadArgument as e:
-        await ctx.send(str(e))
-    except discord.Forbidden:
-        if not ctx.author.permissions_in(ctx.channel).manage_messages and not ctx.author.guild_permissions.manage_messages:
-            await ctx.send("Missing Permissions")
+    if amount < 1 or amount > 100:
+        await ctx.send("Amount must be between 1 and 100.")
+        return
+
+    deleted = await ctx.channel.purge(limit=amount)
 
 @bot.hybrid_command()
 @commands.has_permissions(kick_members=True)
@@ -426,7 +419,7 @@ if existing_help_command:
             `/unban [user]`: Unbans the specified user from the server (requires Ban Members permission).
             `/lockdown [channel]`: Locks down the specified channel (requires Administrator permission).
             `/unlock [channel]`: Unlocks the specified channel (requires Administrator permission).
-            `/clear [amount]`: Clears the specified amount of messages in the current channel (requires Manage Messages permission).
+            `/clean [amount]`: Clears the specified amount of messages in the current channel (requires Manage Messages permission).
             `/mute [user]` : Makes it to that the user can not talk in any channels (requires Timeout permission).
             `/unmute [user]` : Makes it to that the user able to talk in any channels again (requires Timeout permission). 
             ''',
