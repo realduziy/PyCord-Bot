@@ -39,7 +39,10 @@ async def on_command_error(ctx, error):
         pass
     else:
         if ctx and ctx.valid:
-            await ctx.send("An error occurred while running the command. Please try again later.")
+            try:
+                await ctx.send("An error occurred while running the command. Please try again later.")
+            except discord.errors.NotFound:
+                print("Interaction not found.")
         else:
             print("Context is invalid or interaction is not available.")
         raise error
@@ -237,18 +240,17 @@ async def clear(ctx, amount: int):
     try:
         if amount < 1 or amount > 100:
             raise commands.BadArgument("Amount must be between 1 and 100.")
-
         deleted = await ctx.channel.purge(limit=amount)
-
-        response_msg = await ctx.send(f'Cleared {len(deleted)} messages.')
-
-        await asyncio.sleep(5)
-
-        await response_msg.delete()
+        message = f'Cleared {len(deleted)} messages.'
+        if ctx.response:
+            await ctx.send(message)
+        else:
+            print(message)  # Output to console if interaction context is not available
     except commands.BadArgument as e:
         await ctx.send(str(e))
     except discord.Forbidden:
-        await ctx.send("I don't have permission to delete messages.")
+        if not ctx.author.permissions_in(ctx.channel).manage_messages and not ctx.author.guild_permissions.manage_messages:
+            await ctx.send("Missing Permissions")
 
 @bot.hybrid_command()
 @commands.has_permissions(kick_members=True)
@@ -384,15 +386,15 @@ async def advice(ctx):
     if response.status_code == 200:
         advice = response.json()['slip']['advice']
         await ctx.send(advice)
-    else:
-        await ctx.send('Oops, something went wrong. Please try again later.')
 
 @bot.hybrid_command()
-async def avatar(ctx, user: discord.User = None):
-    if user is None:
-        user = ctx.author
-    embed = discord.Embed(title=f"{user.name}'s Avatar")
-    embed.set_image(url=user.avatar.url)
+async def avatar(ctx, member: discord.Member = None):
+    if member is None:
+        member = ctx.author
+    
+    embed = discord.Embed(title=f"{member.name}'s Avatar")
+    embed.set_image(url=member.avatar.url)  # Accessing avatar URL through member.avatar
+    
     await ctx.send(embed=embed)
 
 ###########################################################
@@ -441,6 +443,7 @@ if existing_help_command:
             `/roll [number of sides]`: Rolls a dice with the specified number of sides.
             `/math [your math question]`: Does simple math for you.
             `/advice`: Gives you some random advice.
+            `/avatar [user]`: Displays the specified user's avatar.
             ''',
         ]
 
