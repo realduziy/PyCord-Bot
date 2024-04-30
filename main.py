@@ -126,7 +126,7 @@ async def setjoinmessage(ctx, message: str):
     await ctx.send(f"Join message set to '{message}'")
 
 @bot.hybrid_command(name="setleavemessage", description="Set leave message for the bot.")
-@commands.has_permissions(manage_messages=True)  # Replace with the appropriate permission(s)
+@commands.has_permissions(manage_messages=True)
 async def setleavemessage(ctx, message: str):
     guild_id = str(ctx.guild.id)
     create_config(guild_id)
@@ -163,7 +163,6 @@ async def on_member_remove(member):
         await leave_channel.send(leave_message)
 
 ###########################################################
-# Mute command
 
 @bot.hybrid_command()
 @commands.has_permissions(moderate_members=True)
@@ -242,7 +241,7 @@ async def clear(ctx, amount: int):
         await ctx.send("Amount must be between 1 and 100.")
         return
 
-    await asyncio.sleep(1)  # Add a delay of 1 second between each message deletion
+    await asyncio.sleep(1)
 
     deleted = await ctx.channel.purge(limit=amount)
 
@@ -387,7 +386,7 @@ async def avatar(ctx, member: discord.Member = None):
         member = ctx.author
     
     embed = discord.Embed(title=f"{member.name}'s Avatar")
-    embed.set_image(url=member.avatar.url)  # Accessing avatar URL through member.avatar
+    embed.set_image(url=member.avatar.url)
     
     await ctx.send(embed=embed)
 
@@ -420,7 +419,7 @@ if existing_help_command:
             `/unban [user]`: Unbans the specified user from the server (requires Ban Members permission).
             `/lockdown [channel]`: Locks down the specified channel (requires Administrator permission).
             `/unlock [channel]`: Unlocks the specified channel (requires Administrator permission).
-            `/clean [amount]`: Clears the specified amount of messages in the current channel (requires Manage Messages permission).
+            `/clear [amount]`: Clears the specified amount of messages in the current channel (requires Manage Messages permission).
             `/mute [user]` : Makes it to that the user can not talk in any channels (requires Timeout permission).
             `/unmute [user]` : Makes it to that the user able to talk in any channels again (requires Timeout permission). 
             ''',
