@@ -65,7 +65,7 @@ def save_channels(channels):
 def create_config(guild_id):
     channels = load_channels()
     if guild_id not in channels:
-        channels[guild_id] = {"join": None, "leave": None, "join_message": "Welcome {user} to the server! You are the {member_count}th member.", "leave_message": "Goodbye {user}!"}
+        channels[guild_id] = {"join": None, "leave": None, "join_message": "Welcome {user} to the server! You are the {member_count}th member.", "leave_message": "{user} has left the server"}
         save_channels(channels)
 
 @bot.event
