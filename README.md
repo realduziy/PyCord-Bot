@@ -10,21 +10,11 @@ PyCord-Bot is a simple multipurpose discord bot coded in Python.
 
 The main library that is being used is Discord.py. 
 
-You can view it at https://github.com/Rapptz/discord.py or install it via this command: 
+You can view it at https://github.com/Rapptz/discord.py : 
 
-py -m pip install discord.py
+You will need to install these packeges, you can install them with the following command as long as you have the requerments.txt in the same folder, 
 
-You will also need to install these packeges, you can install them with the following commands, 
-
-py -m pip install discord 
-
-py -m pip install requests
-
-py -m pip install asyncio
-
-py -m pip install aiohttp
-
-py -m pip install python-dotenv
+pip install -r requirements.txt --upgrade
 
 If you find a bug feel free to let me know via Discord or via an issue request but do note that I may not fix it for some time as I dont update this often.
 
