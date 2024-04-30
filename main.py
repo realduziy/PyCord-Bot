@@ -65,8 +65,7 @@ def save_channels(channels):
 def create_config(guild_id):
     channels = load_channels()
     if guild_id not in channels:
-        channels[guild_id] = {"join": None, "leave": None,
-                              "join_message": "Welcome {user} to the server! You are the {member_count}th member.", "leave_message": "Goodbye {user}!"}
+        channels[guild_id] = {"join": None, "leave": None, "join_message": "Welcome {user} to the server! You are the {member_count}th member.", "leave_message": "Goodbye {user}!"}
         save_channels(channels)
 
 @bot.event
@@ -242,6 +241,8 @@ async def clear(ctx, amount: int):
     if amount < 1 or amount > 100:
         await ctx.send("Amount must be between 1 and 100.")
         return
+
+    await asyncio.sleep(1)  # Add a delay of 1 second between each message deletion
 
     deleted = await ctx.channel.purge(limit=amount)
 
