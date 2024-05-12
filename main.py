@@ -234,13 +234,29 @@ async def announce(ctx, *, message=None):
     embed.set_footer(text=f"Announced by {ctx.author.name}")
     await ctx.send(embed=embed)
 
+import asyncio
+
+import asyncio
+
+interaction_response = None
+
 @bot.hybrid_command(name="clear", description="Clears the specified amount of messages.")
 @commands.has_permissions(manage_messages=True)
 async def clear(ctx, amount: int):
+    global interaction_response
+
     if amount < 1 or amount > 100:
         await ctx.send("Amount must be between 1 and 100.")
         return
 
+    # Acknowledge the command immediately
+    if ctx.interaction is not None:
+        interaction_response = await ctx.interaction.response.defer()
+
+    # Perform the long-running task in the background
+    asyncio.create_task(clear_messages(ctx, amount))
+
+async def clear_messages(ctx, amount):
     await asyncio.sleep(1)
 
     deleted = await ctx.channel.purge(limit=amount)
