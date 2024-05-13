@@ -26,7 +26,7 @@ To-do list:
 
 Change everything over to cogs to clean it up more (This will be at a later date as I do not know how to really do this yet)
 
-Logging System (Be able to edit what you want to be logged) (Logs Auto-Moderation stuff and for the Ticket System you can change what channel it puts the Transcripts in, and for the Verification System it logs when someone Verifys successfully or not.)
+Logging System (Basic is done) (Logs Auto-Moderation stuff and for the Ticket System you can change what channel it puts the Transcripts in, and for the Verification System it logs when someone Verifys successfully or not.)
 
 Auto-Moderation (Be able to edit what you want to be logged)
 
