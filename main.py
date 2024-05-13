@@ -10,6 +10,7 @@ import re
 from discord.ext import commands
 from pathlib import Path
 from dotenv import load_dotenv
+import logging
 load_dotenv()
 token = os.getenv("TOKEN")
 
@@ -65,7 +66,7 @@ def save_channels(channels):
 def create_config(guild_id):
     channels = load_channels()
     if guild_id not in channels:
-        channels[guild_id] = {"join": None, "leave": None, "join_message": "Welcome {user} to the server! You are the {member_count}th member.", "leave_message": "{user} has left the server"}
+        channels[guild_id] = {"join": None, "leave": None, "join_message": "Welcome {user} to the server! You are the {member_count}th member.", "leave_message": "{user} has left the server", "logs": None}
         save_channels(channels)
 
 @bot.event
@@ -94,6 +95,203 @@ def validate_channels_data(data):
             raise ValueError(f"Missing 'leave' key for guild {guild_id}.")
     
     return data
+
+##############################################
+
+@bot.event
+async def on_message_edit(before, after):
+    logging.debug(f"Message edited: {before.content} -> {after.content}")
+
+    guild_id = str(before.guild.id) if before.guild else None
+    if guild_id is None:
+        return
+    channels = load_channels()
+    log_channel_id = channels[guild_id]["logs"]
+    if log_channel_id is None:
+        return
+    log_channel = bot.get_channel(log_channel_id)
+    if log_channel is None:
+        return
+
+    # Create the log embed
+    embed = discord.Embed(color=0x00ff00)
+
+    # Check if the edited message contains an embed
+    before_embeds = before.embeds
+    after_embeds = after.embeds
+    if before_embeds and after_embeds:
+        # Compare the embed fields to see what changed
+        before_embed = before_embeds[0]
+        after_embed = after_embeds[0]
+        changes = []
+        for field in before_embed.fields:
+            matching_field = next((f for f in after_embed.fields if f.name == field.name), None)
+            if matching_field and matching_field.value != field.value:
+                changes.append(f"{field.name}: {field.value} -> {matching_field.value}")
+        if changes:
+            embed.title = "Embed Message Edited"
+            embed.add_field(name="Changes", value="\n".join(changes), inline=False)
+            embed.set_footer(text=f"Edited by {after.author.display_name}#{after.author.discriminator}")
+            embed.set_footer(text=f"User ID: {before.author.id} | Message ID: {before.id}")
+    elif before.content != after.content:
+        embed.title = "Message Edited"
+        embed.add_field(name="Before", value=before.content, inline=False)
+        embed.add_field(name="After", value=after.content, inline=False)
+        embed.set_footer(text=f"Edited by {after.author.display_name}#{after.author.discriminator}")
+        embed.set_footer(text=f"User ID: {before.author.id} | Message ID: {before.id}")
+
+    # Get the user who edited the message
+    edited_by = await bot.fetch_user(after.author.id)
+
+    # Mention the user who edited the message
+    embed.description = f"{edited_by.mention} edited a message.\n{embed.description}"
+
+    # Add the user's ID to the log embed
+    embed.set_footer(text=f"User ID: {edited_by.id} | Message ID: {after.id}")
+
+    # Send the log embed to the log channel
+    await log_channel.send(embed=embed)
+
+@bot.event
+async def on_message_delete(message):
+    logging.debug(f"Message deleted: {message.content}")
+
+    guild_id = str(message.guild.id) if message.guild else None
+    if guild_id is None:
+        return
+    channels = load_channels()
+    log_channel_id = channels[guild_id]["logs"]
+    if log_channel_id is None:
+        return
+    log_channel = bot.get_channel(log_channel_id)
+    if log_channel is None:
+        return
+
+    # Check if the deleted message contains an embed
+    embed = None
+    if message.embeds:
+        embed = message.embeds[0]
+
+    # Create the log embed
+    log_embed = discord.Embed(title="Message Deleted", color=0xFF0000)
+    log_embed.set_footer(text=f"Message ID: {message.id}")
+
+    # Add information about the deleted message to the log embed
+    if embed:
+        log_embed.title = "Embed Message Deleted"
+        log_embed.add_field(name="Embed Title", value=embed.title, inline=False)
+        log_embed.add_field(name="Embed URL", value=embed.url, inline=False)
+        log_embed.add_field(name="Embed Description", value=embed.description, inline=False)
+        for field in embed.fields:
+            log_embed.add_field(name=field.name, value=field.value, inline=False)
+    else:
+        log_embed.add_field(name="Content", value=message.content or "No content", inline=False)
+
+    # Get the user who deleted the message
+    deleted_by = await bot.fetch_user(message.author.id)
+
+    # Mention the user who deleted the message
+    log_embed.description = f"{deleted_by.mention} deleted a message.\n{log_embed.description}"
+
+    # Add the user's ID to the log embed
+    log_embed.set_footer(text=f"User ID: {deleted_by.id} | Message ID: {message.id}")
+
+    # Send the log embed to the log channel
+    await log_channel.send(embed=log_embed)
+
+@bot.event
+async def on_guild_channel_create(channel):
+    logging.debug(f"Channel created: {channel.name}")
+
+    guild_id = str(channel.guild.id)
+    channels = load_channels()
+    log_channel_id = channels[guild_id]["logs"]
+    if log_channel_id is None:
+        return
+    log_channel = bot.get_channel(log_channel_id)
+    if log_channel is None:
+        return
+
+    # Get the user who created the channel
+    entry = await channel.guild.audit_logs(limit=1, action=discord.AuditLogAction.channel_create).flatten()
+    created_by = entry[0].user
+
+    # Create the log embed
+    log_embed = discord.Embed(title="Channel Created", color=0x00ff00)
+    log_embed.add_field(name="Channel", value=channel.mention, inline=False)
+    log_embed.set_footer(text=f"Channel ID: {channel.id}")
+    log_embed.set_author(name=f"{created_by.display_name}#{created_by.discriminator}", icon_url=created_by.avatar_url)
+    log_embed.description = f"{created_by.mention} created a new channel.\nUser ID: {created_by.id}"
+
+    # Send the log embed to the log channel
+    await log_channel.send(embed=log_embed)
+
+@bot.event
+async def on_guild_channel_delete(channel):
+    logging.debug(f"Channel deleted: {channel.name}")
+
+    guild_id = str(channel.guild.id)
+    channels = load_channels()
+    log_channel_id = channels[guild_id]["logs"]
+    if log_channel_id is None:
+        return
+    log_channel = bot.get_channel(log_channel_id)
+    if log_channel is None:
+        return
+
+    # Get the user who deleted the channel
+    entry = await channel.guild.audit_logs(limit=1, action=discord.AuditLogAction.channel_delete).flatten()
+    deleted_by = entry[0].user
+
+    # Create the log embed
+    log_embed = discord.Embed(title="Channel Deleted", color=0xFF0000)
+    log_embed.add_field(name="Channel", value=channel.name, inline=False)
+    log_embed.set_footer(text=f"Channel ID: {channel.id}")
+    log_embed.set_author(name=f"{deleted_by.display_name}#{deleted_by.discriminator}", icon_url=deleted_by.avatar_url)
+    log_embed.description = f"{deleted_by.mention} deleted a channel.\nUser ID: {deleted_by.id}"
+
+    # Send the log embed to the log channel
+    await log_channel.send(embed=log_embed)
+
+@bot.event
+async def on_guild_channel_update(before, after):
+    logging.debug(f"Channel updated: {before.name} -> {after.name}")
+
+    guild_id = str(before.guild.id)
+    channels = load_channels()
+    log_channel_id = channels[guild_id]["logs"]
+    if log_channel_id is None:
+        return
+    log_channel = bot.get_channel(log_channel_id)
+    if log_channel is None:
+        return
+
+    # Get the user who updated the channel
+    entry = await before.guild.audit_logs(limit=1, action=discord.AuditLogAction.channel_update).flatten()
+    updated_by = entry[0].user
+
+    # Create the log embed
+    log_embed = discord.Embed(title="Channel Updated", color=0x00ff00)
+    log_embed.add_field(name="Before", value=before.name, inline=False)
+    log_embed.add_field(name="After", value=after.name, inline=False)
+    log_embed.set_footer(text=f"Channel ID: {before.id}")
+    log_embed.set_author(name=f"{updated_by.display_name}#{updated_by.discriminator}", icon_url=updated_by.avatar_url)
+    log_embed.description = f"{updated_by.mention} updated a channel.\nUser ID: {updated_by.id}"
+
+    # Send the log embed to the log channel
+    await log_channel.send(embed=log_embed)
+
+@bot.hybrid_command(name="setlogchannel", description="Set log channel for the bot.")
+@commands.has_permissions(manage_messages=True)
+async def setlogchannel(ctx, channel: discord.TextChannel):
+    guild_id = str(ctx.guild.id)
+    create_config(guild_id)
+    channels = load_channels()
+    channels[guild_id]["logs"] = channel.id
+    save_channels(channels)
+    await ctx.send(f"Log channel set to {channel.mention}")
+
+##############################################
 
 @bot.hybrid_command(name="setjoinchannel", description="Set join channel for the bot.")
 @commands.has_permissions(manage_messages=True)
