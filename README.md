@@ -2,7 +2,7 @@ This bot is being developed by duziy, If you need any help have any suggestions,
 
 NOTE: This bot is still in an early stage of development! At some point, I may use COGS when I understand more about bots and Python in general. I want this to be as simple as it can be so learning COGS is not on my list of priorities for the time being.
 
-Also do note that I don't claim to own any of the code that is used for this bot as most of it is from ChatGPT, StackOverflow, or Youtube!
+Also do note that I don't claim to own any of the code that is used for this bot as most of it is from ChatGPT, StackOverflow, and Youtube!
 
 What is PyCord-Bot?
 
