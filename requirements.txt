@@ -21,7 +21,6 @@ pycares>=4.4.0
 pycparser>=2.22
 pycryptodome>=3.20.0
 python-dotenv>=1.0.1
-requests>=2.31.0
 setuptools>=69.5.1
 urllib3>=2.2.1
 windows-curses>=2.3.2
