@@ -2,7 +2,6 @@ import discord
 import os.path
 import json
 import os
-import requests
 import random
 import asyncio
 import aiohttp
@@ -62,6 +61,12 @@ def load_channels():
 def save_channels(channels):
     with open(channels_file, 'w') as f:
         json.dump(channels, f, indent=4)
+
+async def fetch(url)
+    async with aiohttp.ClientSession() as session:
+        headers = {"Accept": "application/json"}
+        async with session.get(url, headers=headers) as response:
+            return response.json()
 
 def create_config(guild_id):
     channels = load_channels()
@@ -494,28 +499,25 @@ async def unban(ctx, user: discord.User):
 
 @bot.hybrid_command()
 async def dadjoke(ctx):
-    url = "https://icanhazdadjoke.com/"
-    headers = {"Accept": "application/json"}
-    response = requests.get(url, headers=headers)
-    joke = response.json()['joke']
-    await ctx.send(joke)
+    joke = await fetch("https://icanhazdadjoke.com/")
+
+    await ctx.send(joke['joke'])
 
 @bot.hybrid_command()
 async def cat(ctx):
-    url = "https://api.thecatapi.com/v1/images/search"
-    response = requests.get(url)
-    data = response.json()[0]
+    request = await fetch("https://api.thecatapi.com/v1/images/search")
+
     embed = discord.Embed(title="Here's a cat!")
-    embed.set_image(url=data['url'])
+    embed.set_image(url=data[0]['url'])
     await ctx.send(embed=embed)
 
 @bot.hybrid_command()
 async def dog(ctx):
-    url = "https://dog.ceo/api/breeds/image/random"
-    response = requests.get(url)
-    data = response.json()['message']
+    req = await fetch("https://dog.ceo/api/breeds/image/random")
+    image = req['message']
+
     embed = discord.Embed(title="Here's a dog!")
-    embed.set_image(url=data)
+    embed.set_image(url=image)
     await ctx.send(embed=embed)
 
 @bot.hybrid_command()
@@ -588,11 +590,9 @@ async def meme(ctx):
 
 @bot.hybrid_command()
 async def advice(ctx):
-    url = 'https://api.adviceslip.com/advice'
-    response = requests.get(url)
-    if response.status_code == 200:
-        advice = response.json()['slip']['advice']
-        await ctx.send(advice)
+    req = await fetch('https://api.adviceslip.com/advice')
+    advice = req['slip']['advice']
+    await ctx.send(advice)
 
 @bot.hybrid_command()
 async def avatar(ctx, member: discord.Member = None):
