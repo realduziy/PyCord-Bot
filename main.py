@@ -66,7 +66,7 @@ async def fetch(url)
     async with aiohttp.ClientSession() as session:
         headers = {"Accept": "application/json"}
         async with session.get(url, headers=headers) as response:
-            return response.json()
+            return await response.json()
 
 def create_config(guild_id):
     channels = load_channels()
