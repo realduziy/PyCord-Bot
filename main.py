@@ -558,7 +558,7 @@ async def on_member_remove(member):
 
 ###########################################################
 
-@bot.hybrid_command()
+@bot.hybrid_command(name="mute", description="Mute a user.")
 @commands.has_permissions(moderate_members=True)
 async def mute(ctx, member: discord.Member, *, reason="No reason provided."):
     mute_role = discord.utils.get(ctx.guild.roles, name="Muted")
@@ -573,7 +573,7 @@ async def mute(ctx, member: discord.Member, *, reason="No reason provided."):
     await member.add_roles(mute_role, reason=reason)
     await ctx.send(f"{member.mention} has been muted. Reason: {reason}")
 
-@bot.hybrid_command()
+@bot.hybrid_command(name="unmute", description="Unmute a user.")
 @commands.has_permissions(moderate_members=True)
 async def unmute(ctx, member: discord.Member):
     mute_role = discord.utils.get(ctx.guild.roles, name="Muted")
@@ -615,7 +615,7 @@ async def math(ctx, *, expression: str):
     except Exception as e:
         await ctx.send(f"Error: {str(e)}")
 
-@bot.hybrid_command()
+@bot.hybrid_command(name="ping", description="Pings the bot.")
 async def ping(ctx):
     await ctx.send(f'Pong! {round(bot.latency * 1000)}ms', ephemeral=True)
 
@@ -655,7 +655,7 @@ async def clear_messages(ctx, amount):
 
     deleted = await ctx.channel.purge(limit=amount)
 
-@bot.hybrid_command()
+@bot.hybrid_command(name="kick", description="Kicks a user.")
 @commands.has_permissions(kick_members=True)
 async def kick(ctx, user: discord.User):
     guild = ctx.guild
@@ -666,7 +666,7 @@ async def kick(ctx, user: discord.User):
     embed = discord.Embed(description=f"{user} has been kicked")
     await ctx.send(embed=embed)
 
-@bot.hybrid_command()
+@bot.hybrid_command(name="ban", description="Bans a user.")
 @commands.has_permissions(ban_members=True)
 async def ban(ctx, user: discord.User):
     guild = ctx.guild
@@ -677,7 +677,7 @@ async def ban(ctx, user: discord.User):
     embed = discord.Embed(description=f"{user} has been banned")
     await ctx.send(embed=embed)
 
-@bot.hybrid_command()
+@bot.hybrid_command(name="unban", description="Unbans a user.")
 @commands.has_permissions(ban_members=True)
 async def unban(ctx, user: discord.User):
     guild = ctx.guild
@@ -688,7 +688,7 @@ async def unban(ctx, user: discord.User):
     embed = discord.Embed(description=f"{user} has been unbanned")
     await ctx.send(embed=embed)
 
-@bot.hybrid_command()
+@bot.hybrid_command(name="dadjoke", description="Sends a random dad joke.")
 async def dadjoke(ctx):
     url = "https://icanhazdadjoke.com/"
     headers = {"Accept": "application/json"}
@@ -696,7 +696,7 @@ async def dadjoke(ctx):
     joke = response.json()['joke']
     await ctx.send(joke)
 
-@bot.hybrid_command()
+@bot.hybrid_command(name="cat", description="Sends a random cat image.")
 async def cat(ctx):
     url = "https://api.thecatapi.com/v1/images/search"
     response = requests.get(url)
@@ -705,7 +705,7 @@ async def cat(ctx):
     embed.set_image(url=data['url'])
     await ctx.send(embed=embed)
 
-@bot.hybrid_command()
+@bot.hybrid_command(name="dog", description="Sends a random dog image.")
 async def dog(ctx):
     url = "https://dog.ceo/api/breeds/image/random"
     response = requests.get(url)
@@ -714,7 +714,7 @@ async def dog(ctx):
     embed.set_image(url=data)
     await ctx.send(embed=embed)
 
-@bot.hybrid_command()
+@bot.hybrid_command(name="8ball", description="Asks the magic 8ball a question.")
 async def eightball(ctx, *, question):
     responses = [
         "It is certain.",
@@ -737,7 +737,7 @@ async def eightball(ctx, *, question):
     response = random.choice(responses)
     await ctx.send(f"🎱 Question: {question}\n🎱 Answer: {response}")
 
-@bot.hybrid_command()
+@bot.hybrid_command(name="lockdown", with_app_command=False)
 @commands.has_permissions(administrator=True)
 async def lockdown(ctx, channel: discord.TextChannel):
     role = ctx.guild.default_role
@@ -746,7 +746,7 @@ async def lockdown(ctx, channel: discord.TextChannel):
     await channel.set_permissions(role, overwrite=permissions)
     await ctx.send(f"{channel.mention} has been locked down")
 
-@bot.hybrid_command()
+@bot.hybrid_command(name="unlock", with_app_command=False)
 @commands.has_permissions(administrator=True)
 async def unlock(ctx, channel: discord.TextChannel):
     role = ctx.guild.default_role
@@ -755,12 +755,12 @@ async def unlock(ctx, channel: discord.TextChannel):
     await channel.set_permissions(role, overwrite=permissions)
     await ctx.send(f"{channel.mention} has been unlocked")
 
-@bot.hybrid_command()
+@bot.hybrid_command(name="roll", description="Rolls a dice with the specified number of sides.")
 async def roll(ctx, sides: int):
     result = random.randint(1, sides)
     await ctx.send(f"Rolling a {sides}-sided dice... You rolled a {result}!")
 
-@bot.hybrid_command()
+@bot.hybrid_command(name="howgay", description="Get how gay you are.")
 async def howgay(ctx, member: discord.Member = None):
     if member is None:
         member = ctx.author
@@ -782,7 +782,7 @@ async def meme(ctx):
             else:
                 await ctx.send("Failed to fetch a meme. Please try again later.")
 
-@bot.hybrid_command()
+@bot.hybrid_command(name="advice", description="Get an advice from Advice Slip.")
 async def advice(ctx):
     url = 'https://api.adviceslip.com/advice'
     response = requests.get(url)
@@ -790,7 +790,7 @@ async def advice(ctx):
         advice = response.json()['slip']['advice']
         await ctx.send(advice)
 
-@bot.hybrid_command()
+@bot.hybrid_command(name="avatar", description="Get the avatar of a user.")
 async def avatar(ctx, member: discord.Member = None):
     if member is None:
         member = ctx.author
