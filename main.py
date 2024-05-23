@@ -29,7 +29,10 @@ print("Bot is ready!")
 
 @bot.event
 async def on_command_error(ctx, error):
-    if isinstance(error, commands.CommandOnCooldown):
+    if isinstance(error, commands.CommandNotFound):
+        # Ignore CommandNotFound errors
+        return
+    elif isinstance(error, commands.CommandOnCooldown):
         await ctx.send(f"You are on cooldown. Try again in {error.retry_after:.2f}s.", delete_after=10)
     elif isinstance(error, commands.NoPrivateMessage):
         pass
@@ -807,15 +810,15 @@ if existing_help_command:
 
             `/ping`: Displays the bot's latency.
             `/announce [message]`: Announces a message in the current channel (requires Manage Messages permission).
-            `/setjoinchannel [channel]`: Set the channel where join messages will be posted. Only users with admin permissions can use this command.
-            `/setleavechannel [channel]`: Set the channel where leave messages will be posted. Only users with admin permissions can use this command.
-            `/setjoinmessage [message]`: Set the message that will be posted when a user joins the server. Only users with admin permissions can use this command. You can include the user's mention by including `{user}` and `{number}` for what number of user that they are in the message.
-            `/setleavemessage [message]`: Set the message that will be posted when a user leaves the server. Only users with admin permissions can use this command. You can include the user's mention by including `{user}` and `{number}` for what number of user that they are in the message.
-            `/setlogchannel [channel]`: Set the channel where logs will be posted. Only users with admin permissions can use this command.
-            `/settranscriptchannel [channel]`: Set the channel where transcripts will be posted. Only users with admin permissions can use this command.
-            '/setticketcategory [category]': Set the category where tickets will be created. Only users with admin permissions can use this command.
-            '/setticketrole [role]': Set the role that will be given to users when they create a ticket. Only users with admin permissions can use this command.
-            '/setticketchannel [channel]': Set the channel where tickets will be created. Only users with admin permissions can use this command.
+            `/setjoinchannel [channel]`: Set the channel where join messages will be posted. (requires Manage Messages permission).
+            `/setleavechannel [channel]`: Set the channel where leave messages will be posted. (requires Manage Messages permission).
+            `/setjoinmessage [message]`: Set the message that will be sent when a user joins. (requires Manage Messages permission). Include the user's mention by putting `{user}` and `{number}` for the number of members
+            `/setleavemessage [message]`: Set the message that will be posted when a user leaves. (requires Manage Messages permission). Include the user's mention by putting `{user}` and `{number}` for the number of members
+            `/setlogchannel [channel]`: Set the channel where logs will be posted. (requires Manage Messages permission).
+            `/settranscriptchannel [channel]`: Set the channel where transcripts will be posted. (requires Manage Messages permission).
+            `/setticketcategory [category]`: Set the category where tickets will be created. (requires Manage Channels permission).
+            `/setticketrole [role]`: Set the role that will be given to users when they create a ticket. (requires Manage Roles permission).
+            `/setticketchannel [channel]`: Set the channel where tickets will be created. (requires Manage Channels permission).
             ''',
 
             '''
