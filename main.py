@@ -18,7 +18,6 @@ token = os.getenv("TOKEN")
 bot = commands.Bot(command_prefix='.', intents = discord.Intents.all())
 
 tree = bot
-#sync slash commands with discord
 
 @bot.event
 async def on_ready():
@@ -669,12 +668,6 @@ async def announce(ctx, *, message=None):
     embed = discord.Embed(title="", description=message, color=0xFF0000)
     embed.set_footer(text=f"Announced by {ctx.author.name}")
     await ctx.send(embed=embed)
-
-import asyncio
-
-import asyncio
-
-interaction_response = None
 
 @bot.hybrid_command(name="clear", description="Clears the specified amount of messages.")
 @commands.has_permissions(manage_messages=True)
