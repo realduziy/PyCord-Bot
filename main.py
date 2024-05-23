@@ -15,15 +15,20 @@ load_dotenv()
 from discord.ui import Button, View
 token = os.getenv("TOKEN")
 
-intents = discord.Intents.all()
-bot = commands.Bot(command_prefix='.', intents=intents)
+bot = commands.Bot(command_prefix='.', intents = discord.Intents.all())
+#sync slash commands with discord
 
 @bot.event
 async def on_ready():
+    print(f"Logged in as {bot.user.name} ({bot.user.id})")
+
+    try:
+        synced = await bot.tree.sync()
+        print(f"Synced {len(synced)} command(s)")
+    except Exception as e:
+        print(e)
 
     await bot.change_presence(status=discord.Status.online, activity=discord.Game("Need help do /help"))
-
-print("Bot is ready!")
 
 ##########################################################
 
