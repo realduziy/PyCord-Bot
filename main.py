@@ -162,8 +162,8 @@ async def setticketsupportrole(ctx, role: discord.Role):
     save_channels(channels)
     await ctx.send(f'Ticket support role set to {role.mention}.')
 
-@bot.hybrid_command(name="tickets", with_app_command=False)
-async def tickets(ctx):
+@bot.hybrid_command(name="sendticketpanel", with_app_command=False)
+async def sendticketpanel(ctx):
     guild_id = str(ctx.guild.id)
     channels = load_channels()
     panel_channel_id = channels[guild_id]["ticket_panel"]
@@ -172,7 +172,7 @@ async def tickets(ctx):
         await ctx.send('Ticket panel channel not found.')
         return
 
-    embed = discord.Embed(title='Tickets', description='Click the button below to create a new ticket.', color=0x00ff00)
+    embed = discord.Embed(title='Support Tickets', description='Click the button below to create a support ticket.', color=0x00ff00)
     embed.set_footer(text='Ticket System')
     message = await panel_channel.send(embed=embed)
 
@@ -432,25 +432,38 @@ async def on_guild_channel_delete(channel):
 async def on_guild_channel_update(before, after):
     logging.debug(f"Channel updated: {before.name} -> {after.name}")
 
+    if before.name == after.name and before.topic == after.topic and before.overwrites == after.overwrites:
+        # If only the position has changed, ignore the update
+        if before.position != after.position:
+            return
+
     guild_id = str(before.guild.id)
     channels = load_channels()
-    log_channel_id = channels[guild_id]["logs"]
+    log_channel_id = channels[guild_id].get("logs")
     if log_channel_id is None:
         return
+
     log_channel = bot.get_channel(log_channel_id)
     if log_channel is None:
         return
 
     # Get the user who updated the channel
-    entry = await before.guild.audit_logs(limit=1, action=discord.AuditLogAction.channel_update).flatten()
-    updated_by = entry[0].user
+    entry = None
+    async for log_entry in before.guild.audit_logs(limit=1, action=discord.AuditLogAction.channel_update):
+        entry = log_entry
+        break
+    
+    if entry is None:
+        return
+
+    updated_by = entry.user
 
     # Create the log embed
     log_embed = discord.Embed(title="Channel Updated", color=0x00ff00)
     log_embed.add_field(name="Before", value=before.name, inline=False)
     log_embed.add_field(name="After", value=after.name, inline=False)
     log_embed.set_footer(text=f"Channel ID: {before.id}")
-    log_embed.set_author(name=f"{updated_by.display_name}#{updated_by.discriminator}", icon_url=updated_by.avatar_url)
+    log_embed.set_author(name=f"{updated_by.display_name}#{updated_by.discriminator}", icon_url=updated_by.avatar.url)
     log_embed.description = f"{updated_by.mention} updated a channel.\nUser ID: {updated_by.id}"
 
     # Send the log embed to the log channel
