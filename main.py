@@ -811,6 +811,11 @@ if existing_help_command:
             `/setleavechannel [channel]`: Set the channel where leave messages will be posted. Only users with admin permissions can use this command.
             `/setjoinmessage [message]`: Set the message that will be posted when a user joins the server. Only users with admin permissions can use this command. You can include the user's mention by including `{user}` and `{number}` for what number of user that they are in the message.
             `/setleavemessage [message]`: Set the message that will be posted when a user leaves the server. Only users with admin permissions can use this command. You can include the user's mention by including `{user}` and `{number}` for what number of user that they are in the message.
+            `/setlogchannel [channel]`: Set the channel where logs will be posted. Only users with admin permissions can use this command.
+            `/settranscriptchannel [channel]`: Set the channel where transcripts will be posted. Only users with admin permissions can use this command.
+            '/setticketcategory [category]': Set the category where tickets will be created. Only users with admin permissions can use this command.
+            '/setticketrole [role]': Set the role that will be given to users when they create a ticket. Only users with admin permissions can use this command.
+            '/setticketchannel [channel]': Set the channel where tickets will be created. Only users with admin permissions can use this command.
             ''',
 
             '''
