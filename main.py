@@ -12,6 +12,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 import logging
 load_dotenv()
+from discord.ui import Button, View
 token = os.getenv("TOKEN")
 
 intents = discord.Intents.all()
@@ -54,6 +55,7 @@ async def on_command_error(ctx, error):
 
 dir_path = Path(__file__).parent.absolute()
 channels_file = dir_path / "channels.json"
+open_tickets_file = dir_path / "open_tickets.json"
 
 def load_channels():
     with open(channels_file, 'r') as f:
@@ -66,7 +68,17 @@ def save_channels(channels):
 def create_config(guild_id):
     channels = load_channels()
     if guild_id not in channels:
-        channels[guild_id] = {"join": None, "leave": None, "join_message": "Welcome {user} to the server! You are the {member_count}th member.", "leave_message": "{user} has left the server", "logs": None}
+        channels[guild_id] = {
+            "join": None,
+            "leave": None,
+            "join_message": "Welcome {user} to the server! You are the {member_count}th member.",
+            "leave_message": "{user} has left the server",
+            "logs": None,
+            "ticket_panel": None,
+            "transcripts": None,
+            "ticket_support_role": None,
+            "ticket_category": None
+        }
         save_channels(channels)
 
 @bot.event
@@ -95,6 +107,169 @@ def validate_channels_data(data):
             raise ValueError(f"Missing 'leave' key for guild {guild_id}.")
     
     return data
+
+##############################################
+
+#ticket system
+
+def load_open_tickets():
+    if open_tickets_file.exists():
+        with open(open_tickets_file, 'r') as f:
+            return json.load(f)
+    return {}
+
+def save_open_tickets(open_tickets):
+    with open(open_tickets_file, 'w') as f:
+        json.dump(open_tickets, f, indent=4)
+
+@bot.hybrid_command(name="setticketpanel", with_app_command=False)
+@commands.has_permissions(manage_channels=True)
+async def setticketpanel(ctx, channel: discord.TextChannel):
+    guild_id = str(ctx.guild.id)
+    create_config(guild_id)
+    channels = load_channels()
+    channels[guild_id]["ticket_panel"] = channel.id
+    save_channels(channels)
+    await ctx.send(f'Ticket panel channel set to {channel.mention}.')
+
+@bot.hybrid_command(name="settranscriptschannel", with_app_command=False)
+@commands.has_permissions(manage_channels=True)
+async def settranscriptschannel(ctx, channel: discord.TextChannel):
+    guild_id = str(ctx.guild.id)
+    create_config(guild_id)
+    channels = load_channels()
+    channels[guild_id]["transcripts"] = channel.id
+    save_channels(channels)
+    await ctx.send(f'Transcripts channel set to {channel.mention}.')
+
+@bot.hybrid_command(name="setticketcategory", with_app_command=False)
+@commands.has_permissions(manage_channels=True)
+async def setticketcategory(ctx, category: discord.CategoryChannel):
+    guild_id = str(ctx.guild.id)
+    create_config(guild_id)
+    channels = load_channels()
+    channels[guild_id]["ticket_category"] = category.id
+    save_channels(channels)
+    await ctx.send(f'Ticket category set to {category.mention}.')
+
+@bot.hybrid_command(name="setticketsupportrole", with_app_command=False)
+@commands.has_permissions(manage_roles=True)
+async def setticketsupportrole(ctx, role: discord.Role):
+    guild_id = str(ctx.guild.id)
+    create_config(guild_id)
+    channels = load_channels()
+    channels[guild_id]["ticket_support_role"] = role.id
+    save_channels(channels)
+    await ctx.send(f'Ticket support role set to {role.mention}.')
+
+@bot.hybrid_command(name="tickets", with_app_command=False)
+async def tickets(ctx):
+    guild_id = str(ctx.guild.id)
+    channels = load_channels()
+    panel_channel_id = channels[guild_id]["ticket_panel"]
+    panel_channel = ctx.guild.get_channel(panel_channel_id)
+    if not panel_channel:
+        await ctx.send('Ticket panel channel not found.')
+        return
+
+    embed = discord.Embed(title='Tickets', description='Click the button below to create a new ticket.', color=0x00ff00)
+    embed.set_footer(text='Ticket System')
+    message = await panel_channel.send(embed=embed)
+
+    view = View()
+    view.add_item(Button(label='Create Ticket', style=discord.ButtonStyle.green, custom_id='create_ticket'))
+    await message.edit(view=view)
+
+@bot.event
+async def on_interaction(interaction):
+    if interaction.type != discord.InteractionType.component:
+        return
+
+    open_tickets = load_open_tickets()
+    guild_id = str(interaction.guild_id)
+
+    if interaction.data["custom_id"] == "create_ticket":
+        channels = load_channels()
+        category_id = channels[guild_id]["ticket_category"]
+        category = discord.utils.get(interaction.guild.categories, id=category_id)
+        if not category:
+            await interaction.response.send_message('Ticket category not found.', ephemeral=True)
+            return
+
+        support_role_id = channels[guild_id]["ticket_support_role"]
+        support_role = interaction.guild.get_role(support_role_id)
+
+        overwrites = {
+            interaction.guild.default_role: discord.PermissionOverwrite(view_channel=False),
+            interaction.user: discord.PermissionOverwrite(view_channel=True),
+            support_role: discord.PermissionOverwrite(view_channel=True)
+        }
+
+        channel = await interaction.guild.create_text_channel(f'ticket-{interaction.user.id}', category=category, overwrites=overwrites)
+
+        embed = discord.Embed(title='Ticket Created', description=f'{interaction.user.mention}, your ticket has been created. Please wait for a staff member to assist you.', color=0x00ff00)
+        message = await channel.send(embed=embed)
+
+        await message.add_reaction('📝')
+
+        view = View()
+        close_button = Button(label="Close Ticket", style=discord.ButtonStyle.red, custom_id="close_ticket")
+        view.add_item(close_button)
+        await message.edit(view=view)
+
+        open_tickets[str(channel.id)] = {
+            'user_id': str(interaction.user.id),
+            'user_name': str(interaction.user),
+            'created_at': str(channel.created_at)
+        }
+        save_open_tickets(open_tickets)
+
+        panel_channel_id = channels[guild_id]["ticket_panel"]
+        panel_channel = interaction.guild.get_channel(panel_channel_id)
+        if not panel_channel:
+            await interaction.response.send_message('Ticket panel channel not found.', ephemeral=True)
+            return
+
+        await interaction.response.send_message(f'Your ticket has been created: {channel.mention}', ephemeral=True)
+
+    elif interaction.data["custom_id"] == "close_ticket":
+        channel = interaction.guild.get_channel(int(interaction.channel_id))
+        if not channel:
+            await interaction.response.send_message("Ticket channel not found.", ephemeral=True)
+            return
+
+        if str(channel.id) not in open_tickets:
+            await interaction.response.send_message("This ticket is not open.", ephemeral=True)
+            return
+
+        guild = interaction.guild
+        channels = load_channels()
+        transcripts_channel_id = channels[guild_id]["transcripts"]
+        transcripts_channel = guild.get_channel(transcripts_channel_id)
+        if not transcripts_channel:
+            await interaction.response.send_message("Transcripts channel not found.", ephemeral=True)
+            return
+
+        async for message in channel.history(limit=None):
+            if message.author == bot.user:
+                continue
+            embed = discord.Embed(timestamp=message.created_at)
+            embed.set_author(name=str(message.author), icon_url=str(message.author.avatar.url))
+            embed.set_footer(text=f"ID: {message.id}")
+            if message.content:
+                embed.description = message.content[:2048]
+            if message.embeds:
+                embed.description = message.embeds[0].description[:2048]
+            if message.attachments:
+                embed.set_image(url=message.attachments[0].url)
+            await transcripts_channel.send(embed=embed)
+
+        await channel.delete()
+
+        del open_tickets[str(channel.id)]
+        save_open_tickets(open_tickets)
+
+        await interaction.response.send_message("Ticket channel has been closed.", ephemeral=True)
 
 ##############################################
 
