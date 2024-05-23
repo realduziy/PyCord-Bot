@@ -24,13 +24,13 @@ Basic bot functionalities have been completed as of 5/1/2023
 
 To-do list:
 
-Change everything over to cogs to clean it up more. (This will be at a later date as I do not know how to really do this yet.)
+Change everything over to cogs to clean it up more. (This will be at a later date when I have better understanding of python.)
 
-Logging System (Basic is done) (For the Log Auto-Moderation stuff and for the Ticket system, you can change what channel it puts the Transcripts in, and for the Verification system, it logs when someone Verifys successfully or not.)
+Logging System (Basic version is done) (For the Log Auto-Moderation stuff and for the Ticket system, you can change what channel it puts the Transcripts in, and for the Verification system, it logs when someone Verifys successfully or not.)
 
 Auto-Moderation (Be able to edit what you want to be logged)
 
-Ticket System
+Ticket System (Finished, but work on it more when I feel like it.)
 
 Verification System
 
