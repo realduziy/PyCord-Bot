@@ -16,6 +16,8 @@ from discord.ui import Button, View
 token = os.getenv("TOKEN")
 
 bot = commands.Bot(command_prefix='.', intents = discord.Intents.all())
+
+tree = bot
 #sync slash commands with discord
 
 @bot.event
@@ -258,19 +260,44 @@ async def on_interaction(interaction):
             await interaction.response.send_message("Transcripts channel not found.", ephemeral=True)
             return
 
-        async for message in channel.history(limit=None):
-            if message.author == bot.user:
-                continue
-            embed = discord.Embed(timestamp=message.created_at)
-            embed.set_author(name=str(message.author), icon_url=str(message.author.avatar.url))
-            embed.set_footer(text=f"ID: {message.id}")
-            if message.content:
-                embed.description = message.content[:2048]
-            if message.embeds:
-                embed.description = message.embeds[0].description[:2048]
-            if message.attachments:
-                embed.set_image(url=message.attachments[0].url)
-            await transcripts_channel.send(embed=embed)
+        # Initialize an empty list to store message content
+        message_contents = []
+
+        # Get ticket creation and opening information
+        ticket_info = open_tickets[str(channel.id)]
+        ticket_created_at = ticket_info['created_at']
+        ticket_user_id = ticket_info['user_id']
+        ticket_user_name = ticket_info['user_name']
+
+        # Append ticket creation and opening information to the message content
+        ticket_info_text = f"**Ticket Created on:** {ticket_created_at}\n**Ticket Opened by:** {ticket_user_name} ({ticket_user_id})"
+        message_contents.append(ticket_info_text)
+
+        # Check if there are any messages in the channel
+        has_messages = False
+        async for message in channel.history(limit=1):
+            has_messages = True
+            break
+
+        if not has_messages:
+            # If no messages were sent in the ticket, add a message indicating that
+            message_contents.append("No messages were sent in this ticket.")
+        else:
+            # Iterate through the channel history to collect message content and sender information
+            async for message in channel.history(limit=None):
+                if message.author == bot.user:
+                    continue
+                message_content = f"**Content:** {message.content}\n" if message.content else ""
+                author_info = f"**From:** {message.author}\n"
+                embed_description = f"{message_content}{author_info}"
+                message_contents.append(embed_description)
+
+        # Concatenate all message contents into a single embedded message without extra newlines
+        full_embed_description = "\n".join(message_contents)
+        embed = discord.Embed(title="Transcript", description=full_embed_description, color=0x00ff00)
+
+        # Send the transcript message
+        await transcripts_channel.send(embed=embed)
 
         await channel.delete()
 
@@ -396,18 +423,26 @@ async def on_guild_channel_create(channel):
         return
 
     # Get the user who created the channel
-    entry = await channel.guild.audit_logs(limit=1, action=discord.AuditLogAction.channel_create).flatten()
-    created_by = entry[0].user
+    entry = None
+    async for log_entry in channel.guild.audit_logs(limit=1, action=discord.AuditLogAction.channel_create):
+        entry = log_entry
+        break
+    
+    if entry is None:
+        return
+
+    created_by = entry.user
 
     # Create the log embed
     log_embed = discord.Embed(title="Channel Created", color=0x00ff00)
     log_embed.add_field(name="Channel", value=channel.mention, inline=False)
     log_embed.set_footer(text=f"Channel ID: {channel.id}")
-    log_embed.set_author(name=f"{created_by.display_name}#{created_by.discriminator}", icon_url=created_by.avatar_url)
+    log_embed.set_author(name=f"{created_by.display_name}#{created_by.discriminator}")
     log_embed.description = f"{created_by.mention} created a new channel.\nUser ID: {created_by.id}"
 
     # Send the log embed to the log channel
     await log_channel.send(embed=log_embed)
+
 
 @bot.event
 async def on_guild_channel_delete(channel):
@@ -423,14 +458,21 @@ async def on_guild_channel_delete(channel):
         return
 
     # Get the user who deleted the channel
-    entry = await channel.guild.audit_logs(limit=1, action=discord.AuditLogAction.channel_delete).flatten()
-    deleted_by = entry[0].user
+    entry = None
+    async for log_entry in channel.guild.audit_logs(limit=1, action=discord.AuditLogAction.channel_delete):
+        entry = log_entry
+        break
+    
+    if entry is None:
+        return
+
+    deleted_by = entry.user
 
     # Create the log embed
     log_embed = discord.Embed(title="Channel Deleted", color=0xFF0000)
     log_embed.add_field(name="Channel", value=channel.name, inline=False)
     log_embed.set_footer(text=f"Channel ID: {channel.id}")
-    log_embed.set_author(name=f"{deleted_by.display_name}#{deleted_by.discriminator}", icon_url=deleted_by.avatar_url)
+    log_embed.set_author(name=f"{deleted_by.display_name}#{deleted_by.discriminator}")
     log_embed.description = f"{deleted_by.mention} deleted a channel.\nUser ID: {deleted_by.id}"
 
     # Send the log embed to the log channel
