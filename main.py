@@ -853,6 +853,21 @@ async def avatar(interaction, member: discord.Member = None):
     
     await interaction.response.send_message(embed=embed)
 
+@bot.tree.command(name="serverinfo", description="Shows information about the server.")
+async def serverinfo(interaction: discord.Interaction):
+    guild = interaction.guild
+
+    embed = discord.Embed(title=f"{guild.name}", description=f"{guild.description}", color=discord.Color.blurple())
+    embed.set_thumbnail(url=guild.icon.url if guild.icon else None)
+    embed.add_field(name="Owner", value=guild.owner.name, inline=True)
+    embed.add_field(name="ID", value=guild.id, inline=True)
+    embed.add_field(name="Created at", value=guild.created_at.strftime("%Y-%m-%d %H:%M:%S"), inline=True)
+    embed.add_field(name="Members", value=guild.member_count, inline=True)
+    embed.add_field(name="Roles", value=len(guild.roles), inline=True)
+    embed.add_field(name="Channels", value=len(guild.channels), inline=True)
+
+    await interaction.response.send_message(embed=embed)
+
 ###########################################################
 
 @bot.event
@@ -861,6 +876,8 @@ async def on_message_delete(message):
         return
 
 #Help Command
+
+existing_help_command = bot.get_command("help")
 
 @bot.tree.command(name="help", description="Shows all the commands.")
 async def help(interaction: discord.Interaction):
