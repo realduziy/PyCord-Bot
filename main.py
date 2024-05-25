@@ -6,56 +6,58 @@ import random
 import asyncio
 import aiohttp
 import re
+import time
+import platform
 from discord.ext import commands
 from pathlib import Path
 from dotenv import load_dotenv
+from colorama import Fore, Back, Style
 import logging
+from typing import Optional
 load_dotenv()
 from discord.ui import Button, View
 token = os.getenv("TOKEN")
 
-bot = commands.Bot(command_prefix='.', intents = discord.Intents.all())
-
-tree = bot
+intents = discord.Intents.all()
+bot = commands.Bot(command_prefix='.', intents=intents)
 
 ##########################################################
 @bot.event
 async def on_ready():
-    print(f"Logged in as {bot.user.name} ({bot.user.id})")
-
-    try:
-        synced = await bot.tree.sync()
-        print(f"Synced {len(synced)} command(s)")
-    except Exception as e:
-        print(e)
-
+    prfx = (Back.BLACK + Fore.GREEN + time.strftime("%H:%M:%S UTC", time.gmtime()) + Back.RESET + Fore.WHITE + Style.BRIGHT)
+    print(prfx + " Logged in as " + Fore.YELLOW + bot.user.name)
+    print(prfx + " Bot ID " + Fore.YELLOW + str(bot.user.id))
+    print(prfx + " Discord Version " + Fore.YELLOW + discord.__version__)
+    print(prfx + " Python Version " + Fore.YELLOW + str(platform.python_version()))
+    synced = await bot.tree.sync()
+    print(prfx + " Slash CMDs Synced " + Fore.YELLOW + str(len(synced)) + " Commands")
     await bot.change_presence(status=discord.Status.online, activity=discord.Game("Need help do /help"))
 
 ##########################################################
 
 @bot.event
-async def on_command_error(ctx, error):
+async def on_command_error(interaction, error):
     if isinstance(error, commands.CommandNotFound):
         # Ignore CommandNotFound errors
         return
     elif isinstance(error, commands.CommandOnCooldown):
-        await ctx.send(f"You are on cooldown. Try again in {error.retry_after:.2f}s.", delete_after=10)
+        await interaction.response.send_message(f"You are on cooldown. Try again in {error.retry_after:.2f}s.", delete_after=10)
     elif isinstance(error, commands.NoPrivateMessage):
         pass
     elif isinstance(error, commands.MissingPermissions):
-        await ctx.send("You don't have permission to use this command.")
+        await interaction.response.send_message("You don't have permission to use this command.")
     elif isinstance(error, commands.NotOwner):
-        await ctx.send("This command can only be used by the bot owner.")
+        await interaction.response.send_message("This command can only be used by the bot owner.")
     elif isinstance(error, commands.CheckFailure):
         pass
     else:
         message = "An error occurred while running the command. Please try again later."
         print(f"An error occurred: {error}")
         try:
-            if isinstance(ctx, discord.InteractionContext):
-                await ctx.response.send_message(message)
+            if isinstance(interaction, discord.InteractionContext):
+                await interaction.response.send_message(message)
             else:
-                await ctx.send(message)
+                await interaction.response.send_message(message)
         except Exception as e:
             print(f"An error occurred while handling command error: {e}")
         raise error
@@ -146,54 +148,54 @@ def save_open_tickets(open_tickets):
     with open(open_tickets_file, 'w') as f:
         json.dump(open_tickets, f, indent=4)
 
-@bot.hybrid_command(name="setticketpanel", with_app_command=False)
+@bot.tree.command(name="setticketpanel", description="Set the ticket panel channel.")
 @commands.has_permissions(manage_channels=True)
-async def setticketpanel(ctx, channel: discord.TextChannel):
-    guild_id = str(ctx.guild.id)
+async def setticketpanel(interaction, channel: discord.TextChannel):
+    guild_id = str(interaction.guild.id)
     create_config(guild_id)
     channels = load_channels()
     channels[guild_id]["ticket_panel"] = channel.id
     save_channels(channels)
-    await ctx.send(f'Ticket panel channel set to {channel.mention}.')
+    await interaction.response.send_message(f'Ticket panel channel set to {channel.mention}.')
 
-@bot.hybrid_command(name="settranscriptschannel", with_app_command=False)
+@bot.tree.command(name="settranscriptschannel", description="Set the transcripts channel.")
 @commands.has_permissions(manage_channels=True)
-async def settranscriptschannel(ctx, channel: discord.TextChannel):
-    guild_id = str(ctx.guild.id)
+async def settranscriptschannel(interaction, channel: discord.TextChannel):
+    guild_id = str(interaction.guild.id)
     create_config(guild_id)
     channels = load_channels()
     channels[guild_id]["transcripts"] = channel.id
     save_channels(channels)
-    await ctx.send(f'Transcripts channel set to {channel.mention}.')
+    await interaction.response.send_message(f'Transcripts channel set to {channel.mention}.')
 
-@bot.hybrid_command(name="setticketcategory", with_app_command=False)
+@bot.tree.command(name="setticketcategory", description="Set the category where tickets will be created.")
 @commands.has_permissions(manage_channels=True)
-async def setticketcategory(ctx, category: discord.CategoryChannel):
-    guild_id = str(ctx.guild.id)
+async def setticketcategory(interaction, category: discord.CategoryChannel):
+    guild_id = str(interaction.guild.id)
     create_config(guild_id)
     channels = load_channels()
     channels[guild_id]["ticket_category"] = category.id
     save_channels(channels)
-    await ctx.send(f'Ticket category set to {category.mention}.')
+    await interaction.response.send_message(f'Ticket category set to {category.mention}.')
 
-@bot.hybrid_command(name="setticketsupportrole", with_app_command=False)
+@bot.tree.command(name="setticketsupportrole", description="Sets the role that will be given to support tickets.")
 @commands.has_permissions(manage_roles=True)
-async def setticketsupportrole(ctx, role: discord.Role):
-    guild_id = str(ctx.guild.id)
+async def setticketsupportrole(interaction, role: discord.Role):
+    guild_id = str(interaction.guild.id)
     create_config(guild_id)
     channels = load_channels()
     channels[guild_id]["ticket_support_role"] = role.id
     save_channels(channels)
-    await ctx.send(f'Ticket support role set to {role.mention}.')
+    await interaction.response.send_message(f'Ticket support role set to {role.mention}.')
 
-@bot.hybrid_command(name="sendticketpanel", with_app_command=False)
-async def sendticketpanel(ctx):
-    guild_id = str(ctx.guild.id)
+@bot.tree.command(name="sendticketpanel", description="Sends a message in the ticket panel channel.")
+async def sendticketpanel(interaction):
+    guild_id = str(interaction.guild.id)
     channels = load_channels()
     panel_channel_id = channels[guild_id]["ticket_panel"]
-    panel_channel = ctx.guild.get_channel(panel_channel_id)
+    panel_channel = interaction.guild.get_channel(panel_channel_id)
     if not panel_channel:
-        await ctx.send('Ticket panel channel not found.')
+        await interaction.response.send_message('Ticket panel channel not found.')
         return
 
     embed = discord.Embed(title='Support Tickets', description='Click the button below to create a support ticket.', color=0x00ff00)
@@ -533,57 +535,57 @@ async def on_guild_channel_update(before, after):
     # Send the log embed to the log channel
     await log_channel.send(embed=log_embed)
 
-@bot.hybrid_command(name="setlogchannel", description="Set log channel for the bot.")
+@bot.tree.command(name="setlogchannel", description="Set log channel for the bot.")
 @commands.has_permissions(manage_messages=True)
-async def setlogchannel(ctx, channel: discord.TextChannel):
-    guild_id = str(ctx.guild.id)
+async def setlogchannel(interaction, channel: discord.TextChannel):
+    guild_id = str(interaction.guild.id)
     create_config(guild_id)
     channels = load_channels()
     channels[guild_id]["logs"] = channel.id
     save_channels(channels)
-    await ctx.send(f"Log channel set to {channel.mention}")
+    await interaction.response.send_message(f"Log channel set to {channel.mention}")
 
 ##############################################
 
-@bot.hybrid_command(name="setjoinchannel", description="Set join channel for the bot.")
+@bot.tree.command(name="setjoinchannel", description="Set join channel for the bot.")
 @commands.has_permissions(manage_messages=True)
-async def setjoinchannel(ctx, channel: discord.TextChannel):
-    guild_id = str(ctx.guild.id)
+async def setjoinchannel(interaction, channel: discord.TextChannel):
+    guild_id = str(interaction.guild.id)
     create_config(guild_id)
     channels = load_channels()
     channels[guild_id]["join"] = channel.id
     save_channels(channels)
-    await ctx.send(f"Join channel set to {channel.mention}")
+    await interaction.response.send_message(f"Join channel set to {channel.mention}")
 
-@bot.hybrid_command(name="setleavechannel", description="Set leave channel for the bot.")
+@bot.tree.command(name="setleavechannel", description="Set leave channel for the bot.")
 @commands.has_permissions(manage_messages=True)
-async def setleavechannel(ctx, channel: discord.TextChannel):
-    guild_id = str(ctx.guild.id)
+async def setleavechannel(interaction, channel: discord.TextChannel):
+    guild_id = str(interaction.guild.id)
     create_config(guild_id)
     channels = load_channels()
     channels[guild_id]["leave"] = channel.id
     save_channels(channels)
-    await ctx.send(f"Leave channel set to {channel.mention}")
+    await interaction.response.send_message(f"Leave channel set to {channel.mention}")
 
-@bot.hybrid_command(name="setjoinmessage", description="Set join message for the bot.")
+@bot.tree.command(name="setjoinmessage", description="Set join message for the bot.")
 @commands.has_permissions(manage_messages=True)
-async def setjoinmessage(ctx, message: str):
-    guild_id = str(ctx.guild.id)
+async def setjoinmessage(interaction, message: str):
+    guild_id = str(interaction.guild.id)
     create_config(guild_id)
     channels = load_channels()
     channels[guild_id]["join_message"] = message
     save_channels(channels)
-    await ctx.send(f"Join message set to '{message}'")
+    await interaction.response.send_message(f"Join message set to '{message}'")
 
-@bot.hybrid_command(name="setleavemessage", description="Set leave message for the bot.")
+@bot.tree.command(name="setleavemessage", description="Set leave message for the bot.")
 @commands.has_permissions(manage_messages=True)
-async def setleavemessage(ctx, message: str):
-    guild_id = str(ctx.guild.id)
+async def setleavemessage(interaction, message: str):
+    guild_id = str(interaction.guild.id)
     create_config(guild_id)
     channels = load_channels()
     channels[guild_id]["leave_message"] = message
     save_channels(channels)
-    await ctx.send(f"Leave message set to '{message}'")
+    await interaction.response.send_message(f"Leave message set to '{message}'")
 
 @bot.event
 async def on_member_join(member):
@@ -614,41 +616,39 @@ async def on_member_remove(member):
 
 ###########################################################
 
-@bot.hybrid_command(name="mute", description="Mute a user.")
+@bot.tree.command(name="mute", description="Mute a user.")
 @commands.has_permissions(moderate_members=True)
-async def mute(ctx, member: discord.Member, *, reason="No reason provided."):
-    mute_role = discord.utils.get(ctx.guild.roles, name="Muted")
+async def mute(interaction, member: discord.Member, reason: str = "No reason provided."):
+    mute_role = discord.utils.get(interaction.guild.roles, name="Muted")
 
     if not mute_role:
-
-        mute_role = await ctx.guild.create_role(name="Muted")
-
-        for channel in ctx.guild.channels:
+        mute_role = await interaction.guild.create_role(name="Muted")
+        for channel in interaction.guild.channels:
             await channel.set_permissions(mute_role, send_messages=False)
 
     await member.add_roles(mute_role, reason=reason)
-    await ctx.send(f"{member.mention} has been muted. Reason: {reason}")
+    await interaction.response.send_message(f"{member.mention} has been muted. Reason: {reason}")
 
-@bot.hybrid_command(name="unmute", description="Unmute a user.")
+@bot.tree.command(name="unmute", description="Unmute a user.")
 @commands.has_permissions(moderate_members=True)
-async def unmute(ctx, member: discord.Member):
-    mute_role = discord.utils.get(ctx.guild.roles, name="Muted")
+async def unmute(interaction, member: discord.Member):
+    mute_role = discord.utils.get(interaction.guild.roles, name="Muted")
 
     if mute_role in member.roles:
         await member.remove_roles(mute_role)
-        await ctx.send(f"{member.mention} has been unmuted.")
+        await interaction.response.send_message(f"{member.mention} has been unmuted.")
     else:
-        await ctx.send(f"{member.mention} is not muted.")
+        await interaction.response.send_message(f"{member.mention} is not muted.")
 
 ###########################################################
 
-@bot.hybrid_command()
-async def hello(ctx):
-    await ctx.send(f'Hello, I am a bot made by the one and only duziy!', ephemeral=True)
+@bot.tree.command(name="hello", description="Say hello to the bot.")
+async def hello(interaction):
+    await interaction.response.send_message(f'Hello, I am a bot made by the one and only duziy!', ephemeral=True)
 
 
-@bot.hybrid_command(name="math", description="Performs basic math operations.")
-async def math(ctx, *, expression: str):
+@bot.tree.command(name="math", description="Performs basic math operations.")
+async def math(interaction, *, expression: str):
     try:
 
         operations = re.findall(r'\d+\s*[+\-*/]\s*\d+', expression)
@@ -667,116 +667,116 @@ async def math(ctx, *, expression: str):
             elif operator == '/':
                 result += num1 / num2
 
-        await ctx.send(f"Result: {result}")
+        await interaction.response.send_message(f"Result: {result}")
     except Exception as e:
-        await ctx.send(f"Error: {str(e)}")
+        await interaction.response.send_message(f"Error: {str(e)}")
 
-@bot.hybrid_command(name="ping", description="Pings the bot.")
-async def ping(ctx):
-    await ctx.send(f'Pong! {round(bot.latency * 1000)}ms', ephemeral=True)
+@bot.tree.command(name="ping", description="Pings the bot.")
+async def ping(interaction):
+    await interaction.response.send_message(f'Pong! {round(bot.latency * 1000)}ms', ephemeral=True)
 
-@bot.hybrid_command()
+@bot.tree.command(name="announce", description="Announces a message.")
 @commands.has_permissions(manage_messages=True)
-async def announce(ctx, *, message=None):
+async def announce(interaction: discord.Interaction, *, message: Optional[str] = None):
     if message is None:
         raise commands.MissingRequiredArgument
+
     embed = discord.Embed(title="", description=message, color=0xFF0000)
-    embed.set_footer(text=f"Announced by {ctx.author.name}")
-    await ctx.send(embed=embed)
+    embed.set_footer(text=f"Announced by {interaction.user.name}")
+    await interaction.response.send_message(embed=embed)
 
-@bot.hybrid_command(name="clear", description="Clears the specified amount of messages.")
+@bot.tree.command(name="clear", description="Clears the specified amount of messages.")
 @commands.has_permissions(manage_messages=True)
-async def clear(ctx, amount: int):
-    global interaction_response
-
+async def clear(interaction, amount: int):
     if amount < 1 or amount > 100:
-        await ctx.send("Amount must be between 1 and 100.")
+        await interaction.response.send_message("Amount must be between 1 and 100.")
         return
 
     # Acknowledge the command immediately
-    if ctx.interaction is not None:
-        interaction_response = await ctx.interaction.response.defer()
+    await interaction.response.defer()
 
     # Perform the long-running task in the background
-    asyncio.create_task(clear_messages(ctx, amount))
-
-async def clear_messages(ctx, amount):
     await asyncio.sleep(1)
 
-    deleted = await ctx.channel.purge(limit=amount)
+    deleted = await interaction.channel.purge(limit=amount)
 
-@bot.hybrid_command(name="kick", description="Kicks a user.")
+    try:
+        await interaction.followup.send("Deleted {} messages.".format(len(deleted)))
+    except discord.NotFound:
+        pass  # Ignore NotFound error if the original message is not found
+
+@bot.tree.command(name="kick", description="Kicks a user.")
 @commands.has_permissions(kick_members=True)
-async def kick(ctx, user: discord.User):
-    guild = ctx.guild
+async def kick(interaction, user: discord.User):
+    guild = interaction.guild
     try:
         await guild.kick(user=user)
     except discord.errors.NotFound:
         pass
     embed = discord.Embed(description=f"{user} has been kicked")
-    await ctx.send(embed=embed)
+    await interaction.response.send_message(embed=embed)
 
-@bot.hybrid_command(name="ban", description="Bans a user.")
+@bot.tree.command(name="ban", description="Bans a user.")
 @commands.has_permissions(ban_members=True)
-async def ban(ctx, user: discord.User):
-    guild = ctx.guild
+async def ban(interaction, user: discord.User):
+    guild = interaction.guild
     try:
         await guild.ban(user=user)
     except discord.errors.NotFound:
         pass
     embed = discord.Embed(description=f"{user} has been banned")
-    await ctx.send(embed=embed)
+    await interaction.response.send_message(embed=embed)
 
-@bot.hybrid_command(name="unban", description="Unbans a user.")
+@bot.tree.command(name="unban", description="Unbans a user.")
 @commands.has_permissions(ban_members=True)
-async def unban(ctx, user: discord.User):
-    guild = ctx.guild
+async def unban(interaction, user: discord.User):
+    guild = interaction.guild
     try:
         await guild.unban(user=user)
     except discord.errors.NotFound:
         pass
     embed = discord.Embed(description=f"{user} has been unbanned")
-    await ctx.send(embed=embed)
+    await interaction.response.send_message(embed=embed)
 
-@bot.hybrid_command(name="dadjoke", description="Sends a random dad joke.")
-async def dadjoke(ctx):
+@bot.tree.command(name="dadjoke", description="Sends a random dad joke.")
+async def dadjoke(interaction):
     request = await fetch("https://icanhazdadjoke.com/")
     if request and 'joke' in request:
         joke = request['joke']
-        await ctx.send(joke)
+        await interaction.response.send_message(joke)
 
-@bot.hybrid_command(name="advice", description="Get an advice from Advice Slip.")
-async def advice(ctx):
+@bot.tree.command(name="advice", description="Get an advice from Advice Slip.")
+async def advice(interaction):
     url = 'https://api.chucknorris.io/jokes/random'
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as response:
             if response.status == 200:
                 data = await response.json()
                 joke = data['value']
-                await ctx.send(joke)
+                await interaction.response.send_message(joke)
             else:
-                await ctx.send("Sorry, couldn't fetch advice. The response is not in the expected format.")
+                await interaction.response.send_message("Sorry, couldn't fetch advice. The response is not in the expected format.")
 
-@bot.hybrid_command(name="cat", description="Sends a random cat image.")
-async def cat(ctx):
+@bot.tree.command(name="cat", description="Sends a random cat image.")
+async def cat(interaction):
     request = await fetch("https://api.thecatapi.com/v1/images/search")
     if request and isinstance(request, list) and len(request) > 0:
         image_url = request[0].get('url')
         if image_url:
             embed = discord.Embed(title="Here's a cat!")
             embed.set_image(url=image_url)
-            await ctx.send(embed=embed)
+            await interaction.response.send_message(embed=embed)
 
-@bot.hybrid_command(name="dog", description="Sends a random dog image.")
-async def dog(ctx):
+@bot.tree.command(name="dog", description="Sends a random dog image.")
+async def dog(interaction):
     req = await fetch("https://dog.ceo/api/breeds/image/random")
     image = req['message']
     embed = discord.Embed(title="Here's a dog!")
     embed.set_image(url=image)
-    await ctx.send(embed=embed)
+    await interaction.response.send_message(embed=embed)
 
-@bot.hybrid_command(name="8ball", description="Asks the magic 8ball a question.")
-async def eightball(ctx, *, question):
+@bot.tree.command(name="8ball", description="Asks the magic 8ball a question.")
+async def eightball(interaction, *, question: str):
     responses = [
         "It is certain.",
         "Without a doubt.",
@@ -796,40 +796,40 @@ async def eightball(ctx, *, question):
         "Very doubtful."
     ]
     response = random.choice(responses)
-    await ctx.send(f"🎱 Question: {question}\n🎱 Answer: {response}")
+    await interaction.response.send_message(f"🎱 Question: {question}\n🎱 Answer: {response}")
 
-@bot.hybrid_command(name="lockdown", with_app_command=False)
+@bot.tree.command(name="lockdown")
 @commands.has_permissions(administrator=True)
-async def lockdown(ctx, channel: discord.TextChannel):
-    role = ctx.guild.default_role
+async def lockdown(interaction, channel: discord.TextChannel):
+    role = interaction.guild.default_role
     permissions = channel.overwrites_for(role)
     permissions.send_messages = False
     await channel.set_permissions(role, overwrite=permissions)
-    await ctx.send(f"{channel.mention} has been locked down")
+    await interaction.response.send_message(f"{channel.mention} has been locked down")
 
-@bot.hybrid_command(name="unlock", with_app_command=False)
+@bot.tree.command(name="unlock", description="Unlocks a channel.")
 @commands.has_permissions(administrator=True)
-async def unlock(ctx, channel: discord.TextChannel):
-    role = ctx.guild.default_role
+async def unlock(interaction, channel: discord.TextChannel):
+    role = interaction.guild.default_role
     permissions = channel.overwrites_for(role)
     permissions.send_messages = None
     await channel.set_permissions(role, overwrite=permissions)
-    await ctx.send(f"{channel.mention} has been unlocked")
+    await interaction.response.send_message(f"{channel.mention} has been unlocked")
 
-@bot.hybrid_command(name="roll", description="Rolls a dice with the specified number of sides.")
-async def roll(ctx, sides: int):
+@bot.tree.command(name="roll", description="Rolls a dice with the specified number of sides.")
+async def roll(interaction, sides: int):
     result = random.randint(1, sides)
-    await ctx.send(f"Rolling a {sides}-sided dice... You rolled a {result}!")
+    await interaction.response.send_message(f"Rolling a {sides}-sided dice... You rolled a {result}!")
 
-@bot.hybrid_command(name="howgay", description="Get how gay you are.")
-async def howgay(ctx, member: discord.Member = None):
+@bot.tree.command(name="howgay", description="Get how gay you are.")
+async def howgay(interaction, member: discord.Member = None):
     if member is None:
-        member = ctx.author
+        member = interaction.author
     gay_percent = random.randint(0, 100)
-    await ctx.send(f"{member.mention} is {gay_percent}% gay 🏳️‍🌈")
+    await interaction.response.send_message(f"{member.mention} is {gay_percent}% gay 🏳️‍🌈")
 
-@bot.hybrid_command(name="meme", description="Get a random meme from Imgur!")
-async def meme(ctx):
+@bot.tree.command(name="meme", description="Get a random meme from Imgur!")
+async def meme(interaction):
     async with aiohttp.ClientSession() as session:
         async with session.get("https://www.reddit.com/r/memes/random/.json") as response:
             if response.status == 200:
@@ -839,115 +839,113 @@ async def meme(ctx):
                 embed = discord.Embed(title="Random Meme")
                 embed.set_image(url=meme_url)
                 
-                await ctx.send(embed=embed)
+                await interaction.response.send_message(embed=embed)
             else:
-                await ctx.send("Failed to fetch a meme. Please try again later.")
+                await interaction.response.send_message("Failed to fetch a meme. Please try again later.")
 
-@bot.hybrid_command(name="avatar", description="Get the avatar of a user.")
-async def avatar(ctx, member: discord.Member = None):
+@bot.tree.command(name="avatar", description="Get the avatar of a user.")
+async def avatar(interaction, member: discord.Member = None):
     if member is None:
-        member = ctx.author
+        member = interaction.author
     
     embed = discord.Embed(title=f"{member.name}'s Avatar")
     embed.set_image(url=member.avatar.url)
     
-    await ctx.send(embed=embed)
+    await interaction.response.send_message(embed=embed)
 
 ###########################################################
-# Help Command
 
-existing_help_command = bot.get_command("help")
+@bot.event
+async def on_message_delete(message):
+    if message.author == bot.user:
+        return
 
-if existing_help_command:
-    bot.remove_command("help")
-    @bot.hybrid_command(name="help", description="Shows all the commands.")
-    async def help(ctx):
-        contents = [
-            '''
-            **Utilities:**
+#Help Command
 
-            `/ping`: Displays the bot's latency.
-            `/announce [message]`: Announces a message in the current channel (requires Manage Messages permission).
-            `/setjoinchannel [channel]`: Set the channel where join messages will be posted. (requires Manage Messages permission).
-            `/setleavechannel [channel]`: Set the channel where leave messages will be posted. (requires Manage Messages permission).
-            `/setjoinmessage [message]`: Set the message that will be sent when a user joins. (requires Manage Messages permission). Include the user's mention by putting `{user}` and `{number}` for the number of members
-            `/setleavemessage [message]`: Set the message that will be posted when a user leaves. (requires Manage Messages permission). Include the user's mention by putting `{user}` and `{number}` for the number of members
-            `/setlogchannel [channel]`: Set the channel where logs will be posted. (requires Manage Messages permission).
-            `/settranscriptchannel [channel]`: Set the channel where transcripts will be posted. (requires Manage Messages permission).
-            `/setticketcategory [category]`: Set the category where tickets will be created. (requires Manage Channels permission).
-            `/setticketrole [role]`: Set the role that will be given to users when they create a ticket. (requires Manage Roles permission).
-            `/setticketchannel [channel]`: Set the channel where tickets will be created. (requires Manage Channels permission).
-            ''',
+@bot.tree.command(name="help", description="Shows all the commands.")
+async def help(interaction: discord.Interaction):
+    contents = [
+        '''
+        **Utilities:**
 
-            '''
-            **Moderation:**
+        `/ping`: Displays the bot's latency.
+        `/announce [message]`: Announces a message in the current channel (requires Manage Messages permission).
+        `/setjoinchannel [channel]`: Set the channel where join messages will be posted. (requires Manage Messages permission).
+        `/setleavechannel [channel]`: Set the channel where leave messages will be posted. (requires Manage Messages permission).
+        `/setjoinmessage [message]`: Set the message that will be sent when a user joins. (requires Manage Messages permission). Include the user's mention by putting `{user}` and `{number}` for the number of members
+        `/setleavemessage [message]`: Set the message that will be posted when a user leaves. (requires Manage Messages permission). Include the user's mention by putting `{user}` and `{number}` for the number of members
+        `/setlogchannel [channel]`: Set the channel where logs will be posted. (requires Manage Messages permission).
+        `/settranscriptchannel [channel]`: Set the channel where transcripts will be posted. (requires Manage Messages permission).
+        `/setticketcategory [category]`: Set the category where tickets will be created. (requires Manage Channels permission).
+        `/setticketrole [role]`: Set the role that will be given to users when they create a ticket. (requires Manage Roles permission).
+        `/setticketchannel [channel]`: Set the channel where tickets will be created. (requires Manage Channels permission).
+        ''',
 
-            `/kick [user]`: Kicks the specified user from the server (requires Kick Members permission).
-            `/ban [user]`: Bans the specified user from the server (requires Ban Members permission).
-            `/unban [user]`: Unbans the specified user from the server (requires Ban Members permission).
-            `/lockdown [channel]`: Locks down the specified channel (requires Administrator permission).
-            `/unlock [channel]`: Unlocks the specified channel (requires Administrator permission).
-            `/clear [amount]`: Clears the specified amount of messages in the current channel (requires Manage Messages permission).
-            `/mute [user]` : Makes it to that the user can not talk in any channels (requires Timeout permission).
-            `/unmute [user]` : Makes it to that the user able to talk in any channels again (requires Timeout permission). 
-            ''',
+        '''
+        **Moderation:**
 
-            '''
-            **Fun:**
+        `/kick [user]`: Kicks the specified user from the server (requires Kick Members permission).
+        `/ban [user]`: Bans the specified user from the server (requires Ban Members permission).
+        `/unban [user]`: Unbans the specified user from the server (requires Ban Members permission).
+        `/lockdown [channel]`: Locks down the specified channel (requires Administrator permission).
+        `/unlock [channel]`: Unlocks the specified channel (requires Administrator permission).
+        `/clear [amount]`: Clears the specified amount of messages in the current channel (requires Manage Messages permission).
+        `/mute [user]` : Makes it to that the user can not talk in any channels (requires Timeout permission).
+        `/unmute [user]` : Makes it to that the user able to talk in any channels again (requires Timeout permission).
+        ''',
 
-            `/hello`: Greets the user.
-            `/meme`: Fetches a random meme.
-            `/dadjoke`: Fetches a random dad joke.
-            `/cat`: Fetches a random picture of a cat.
-            `/dog`: Fetches a random picture of a dog.
-            `/eightball [question]`: Responds with a random 8ball response to the given question.
-            `/roll [number of sides]`: Rolls a dice with the specified number of sides.
-            `/math [your math question]`: Does simple math for you.
-            `/advice`: Gives you some random advice.
-            `/avatar [user]`: Displays the specified user's avatar.
-            ''',
-        ]
+        '''
+        **Fun:**
 
-        pages = len(contents)
-        cur_page = 0
-        embed = discord.Embed(description=contents[cur_page], color=discord.Color.blurple())
-        embed.set_footer(text=f"Page {cur_page+1}/{pages}")
+        `/hello`: Greets the user.
+        `/meme`: Fetches a random meme.
+        `/dadjoke`: Fetches a random dad joke.
+        `/cat`: Fetches a random picture of a cat.
+        `/dog`: Fetches a random picture of a dog.
+        `/eightball [question]`: Responds with a random 8ball response to the given question.
+        `/roll [number of sides]`: Rolls a dice with the specified number of sides.
+        `/math [your math question]`: Does simple math for you.
+        `/advice`: Gives you some random advice.
+        `/avatar [user]`: Displays the specified user's avatar.
+        ''',
+    ]
 
-        message = await ctx.send(embed=embed)
-        await message.add_reaction("◀️")
-        await message.add_reaction("▶️")
-        await message.add_reaction("❌")
+    pages = len(contents)
+    cur_page = 0
+    embed = discord.Embed(description=contents[cur_page], color=discord.Color.blurple())
+    embed.set_footer(text=f"Page {cur_page+1}/{pages}")
+    message = await interaction.response.send_message(embed=embed)
+    bot_message = await interaction.channel.history(limit=1).__anext__()
 
-        def check(reaction, user):
-            return user == ctx.author and str(reaction.emoji) in ["◀️", "▶️", "❌"]
+    await bot_message.add_reaction("◀️")
+    await bot_message.add_reaction("▶️")
 
-        while True:
-            try:
-                reaction, user = await bot.wait_for("reaction_add", timeout=40, check=check)
+    def check(reaction, user):
+        return user == interaction.user and str(reaction.emoji) in ["◀️", "▶️"]
 
-                if str(reaction.emoji) == "▶️" and cur_page < pages - 1:
-                    cur_page += 1
-                    embed.description = contents[cur_page]
-                    embed.set_footer(text=f"Page {cur_page+1}/{pages}")
-                    await message.edit(embed=embed)
-                    await message.remove_reaction(reaction, user)
+    while True:
+        try:
+            reaction, user = await bot.wait_for("reaction_add", timeout=40, check=check)
 
-                elif str(reaction.emoji) == "◀️" and cur_page > 0:
-                    cur_page -= 1
-                    embed.description = contents[cur_page]
-                    embed.set_footer(text=f"Page {cur_page+1}/{pages}")
-                    await message.edit(embed=embed)
-                    await message.remove_reaction(reaction, user)
+            if str(reaction.emoji) == "▶️" and cur_page < pages - 1:
+                cur_page += 1
+                embed.description = contents[cur_page]
+                embed.set_footer(text=f"Page {cur_page+1}/{pages}")
+                await bot_message.edit(embed=embed)
+                await bot_message.remove_reaction(reaction, user)
 
-                elif str(reaction.emoji) == "❌":
-                    await message.delete()
-                    break
+            elif str(reaction.emoji) == "◀️" and cur_page > 0:
+                cur_page -= 1
+                embed.description = contents[cur_page]
+                embed.set_footer(text=f"Page {cur_page+1}/{pages}")
+                await bot_message.edit(embed=embed)
+                await bot_message.remove_reaction(reaction, user)
 
-                else:
-                    await message.remove_reaction(reaction, user)
+            else:
+                await bot_message.remove_reaction(reaction, user)
 
-            except asyncio.TimeoutError:
-                await message.delete()
-                break
+        except asyncio.TimeoutError:
+            await bot_message.delete()
+            break
 
 bot.run(token)
