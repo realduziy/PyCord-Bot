@@ -2,7 +2,6 @@ import discord
 import os.path
 import json
 import os
-import requests
 import random
 import asyncio
 import aiohttp
@@ -19,6 +18,7 @@ bot = commands.Bot(command_prefix='.', intents = discord.Intents.all())
 
 tree = bot
 
+##########################################################
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user.name} ({bot.user.id})")
@@ -61,6 +61,21 @@ async def on_command_error(ctx, error):
         raise error
 
 ##########################################################
+
+# Define an asynchronous fetch function
+async def fetch(url):
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers={'Accept': 'application/json'}) as response:
+                if response.status == 200:
+                    return await response.json()
+                else:
+                    return None
+    except aiohttp.ContentTypeError:
+        return None
+    except Exception as e:
+        print(f"An error occurred while fetching data: {e}")
+        return None
 
 dir_path = Path(__file__).parent.absolute()
 channels_file = dir_path / "channels.json"
@@ -725,28 +740,39 @@ async def unban(ctx, user: discord.User):
 
 @bot.hybrid_command(name="dadjoke", description="Sends a random dad joke.")
 async def dadjoke(ctx):
-    url = "https://icanhazdadjoke.com/"
-    headers = {"Accept": "application/json"}
-    response = requests.get(url, headers=headers)
-    joke = response.json()['joke']
-    await ctx.send(joke)
+    request = await fetch("https://icanhazdadjoke.com/")
+    if request and 'joke' in request:
+        joke = request['joke']
+        await ctx.send(joke)
+
+@bot.hybrid_command(name="advice", description="Get an advice from Advice Slip.")
+async def advice(ctx):
+    url = 'https://api.chucknorris.io/jokes/random'
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            if response.status == 200:
+                data = await response.json()
+                joke = data['value']
+                await ctx.send(joke)
+            else:
+                await ctx.send("Sorry, couldn't fetch advice. The response is not in the expected format.")
 
 @bot.hybrid_command(name="cat", description="Sends a random cat image.")
 async def cat(ctx):
-    url = "https://api.thecatapi.com/v1/images/search"
-    response = requests.get(url)
-    data = response.json()[0]
-    embed = discord.Embed(title="Here's a cat!")
-    embed.set_image(url=data['url'])
-    await ctx.send(embed=embed)
+    request = await fetch("https://api.thecatapi.com/v1/images/search")
+    if request and isinstance(request, list) and len(request) > 0:
+        image_url = request[0].get('url')
+        if image_url:
+            embed = discord.Embed(title="Here's a cat!")
+            embed.set_image(url=image_url)
+            await ctx.send(embed=embed)
 
 @bot.hybrid_command(name="dog", description="Sends a random dog image.")
 async def dog(ctx):
-    url = "https://dog.ceo/api/breeds/image/random"
-    response = requests.get(url)
-    data = response.json()['message']
+    req = await fetch("https://dog.ceo/api/breeds/image/random")
+    image = req['message']
     embed = discord.Embed(title="Here's a dog!")
-    embed.set_image(url=data)
+    embed.set_image(url=image)
     await ctx.send(embed=embed)
 
 @bot.hybrid_command(name="8ball", description="Asks the magic 8ball a question.")
@@ -816,14 +842,6 @@ async def meme(ctx):
                 await ctx.send(embed=embed)
             else:
                 await ctx.send("Failed to fetch a meme. Please try again later.")
-
-@bot.hybrid_command(name="advice", description="Get an advice from Advice Slip.")
-async def advice(ctx):
-    url = 'https://api.adviceslip.com/advice'
-    response = requests.get(url)
-    if response.status_code == 200:
-        advice = response.json()['slip']['advice']
-        await ctx.send(advice)
 
 @bot.hybrid_command(name="avatar", description="Get the avatar of a user.")
 async def avatar(ctx, member: discord.Member = None):
