@@ -842,7 +842,7 @@ existing_help_command = bot.get_command("help")
 
 if existing_help_command:
     bot.remove_command("help")
-    @bot.hybrid_command()
+    @bot.hybrid_command(name="help", description="Shows all the commands.")
     async def help(ctx):
         contents = [
             '''
