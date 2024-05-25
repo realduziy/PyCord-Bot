@@ -798,7 +798,7 @@ async def eightball(interaction, *, question: str):
     response = random.choice(responses)
     await interaction.response.send_message(f"🎱 Question: {question}\n🎱 Answer: {response}")
 
-@bot.tree.command(name="lockdown")
+@bot.tree.command(name="lockdown", description="Locks down a channel.")
 @commands.has_permissions(administrator=True)
 async def lockdown(interaction, channel: discord.TextChannel):
     role = interaction.guild.default_role
