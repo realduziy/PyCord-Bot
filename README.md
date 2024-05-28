@@ -1,8 +1,8 @@
-This bot is being developed by duziy, If you need any help have any suggestions, or wish to help me, feel free to private message me via discord @ duziy.
+This bot is being developed by duziy, If you need any help, have any suggestions, or wish to help me, feel free to private message me via discord @ duziy. Feel free to submit pull request if you have suggestions and i'll take a look at it at some point.
 
-NOTE: This bot is still in an early stage of development! At some point, I may use COGS when I understand more about bots and Python in general. I want this to be as simple as it can be so learning COGS is not on my list of priorities for the time being.
+NOTE: This bot is still in an early stage of development! At some point, I will use COGS when I have a better understanding of Python. I want this to be as simple as it can be so learning COGS is not on my list of priorities.
 
-Also, do note that I don't claim to own any of the code that is used for this bot, as most of it is from ChatGPT, StackOverflow, and Youtube!
+I don't claim to own any of the code that is used for this bot, as most of it is from ChatGPT, StackOverflow, and Youtube!
 
 What is PyCord-Bot?
 
@@ -17,10 +17,6 @@ You will need to install these packages, You can install them with the following
 pip install -r requirements.txt --upgrade
 
 If you find a bug, feel free to let me know via Discord or via an issue request, but do note that I may not fix it for some time as I dont update this often.
-
-Note:
-
-Basic bot functionalities have been completed as of 5/1/2023
 
 To-do list:
 
