@@ -32,4 +32,4 @@ Verification System
 
 Make a better lockdown command and make it so you can select what channels you want the lockdown command to lockdown by default. If there is none, it will just be the channel that you sent the command in.
 
-Add music for, Spotify, Youtube, Soundcloud.
+Add music for, Spotify and Youtube.
