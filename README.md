@@ -1,4 +1,4 @@
-This bot is being developed by duziy, If you need any help, have any suggestions, or wish to help me, feel free to private message me via discord @ duziy. Feel free to submit pull request if you have suggestions and i'll take a look at it at some point.
+This bot is being developed by Duziy. If you need help, have any suggestions, or wish to help me, feel free to private message me via Discord @ duziy. Feel free to submit pull request if you have suggestions and i'll take a look at it at some point.
 
 NOTE: This bot is still in an early stage of development! At some point, I will use COGS when I have a better understanding of Python. I want this to be as simple as it can be so learning COGS is not on my list of priorities.
 
@@ -12,11 +12,11 @@ The main library that is being used is Discord.py.
 
 You can view it at https://github.com/Rapptz/discord.py. 
 
-You will need to install these packages, You can install them with the following command, as long as you have requerments.txt in the same folder. 
+You will need to install these packages. You can install them with the following command, as long as you have requerments.txt in the same folder. 
 
 pip install -r requirements.txt --upgrade
 
-If you find a bug, feel free to let me know via Discord or via an issue request, but do note that I may not fix it for some time as I dont update this often.
+If you find a bug, feel free to let me know via Discord or via an issue request, but do note that I may not fix it for some time as I don't update this often.
 
 To-do list:
 
@@ -32,4 +32,4 @@ Verification System
 
 Make a better lockdown command and make it so you can select what channels you want the lockdown command to lockdown by default. If there is none, it will just be the channel that you sent the command in.
 
-Add music for, Spotify and Youtube.
+Add music to Spotify and Youtube.
