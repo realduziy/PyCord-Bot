@@ -16,6 +16,14 @@ You will need to install these packages. You can install them with the following
 
 pip install -r requirements.txt --upgrade
 
+If this command does not work run this:
+
+py -m pip install -r requirements.txt --upgrade 
+
+then
+
+python.exe -m pip install --upgrade pip
+
 If you find a bug, feel free to let me know via Discord or via an issue request, but do note that I may not fix it for some time as I don't update this often.
 
 To-do list:
