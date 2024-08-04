@@ -18,11 +18,13 @@ pip install -r requirements.txt --upgrade
 
 If this command does not work run this:
 
-py -m pip install -r requirements.txt --upgrade 
+py -m pip install -r requirements.txt --upgrade (this is a alternative to the first command)
 
 then
 
-python.exe -m pip install --upgrade pip
+python.exe -m pip install --upgrade pip (this command makes sure that pip is updated to the newest version)
+
+if your still having problems try uninstalling python and download the newest version via this link https://www.python.org/downloads/
 
 If you find a bug, feel free to let me know via Discord or via an issue request, but do note that I may not fix it for some time as I don't update this often.
 
