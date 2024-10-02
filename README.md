@@ -18,7 +18,7 @@ pip install -r requirements.txt --upgrade
 
 If this command does not work run this:
 
-py -m pip install -r requirements.txt --upgrade (this is a alternative to the first command)
+python-m pip install -r requirements.txt --upgrade (this is a alternative to the first command)
 
 then
 
