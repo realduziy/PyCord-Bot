@@ -4,3 +4,4 @@ aiohttp
 discord.py
 python-dotenv
 colorama
+dotenv
