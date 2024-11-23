@@ -3,3 +3,4 @@ asyncio
 aiohttp
 discord.py
 python-dotenv
+colorama
