@@ -1,3 +1,5 @@
+Must use Python 3.12.8
+
 This bot is being developed by Duziy. If you need help, have any suggestions, or wish to help me, feel free to private message me via Discord @ duziy. Feel free to submit pull request if you have suggestions and i'll take a look at it at some point.
 
 NOTE: This bot is still in an early stage of development! At some point, I will use COGS when I have a better understanding of Python. I want this to be as simple as it can be so learning COGS is not on my list of priorities.
