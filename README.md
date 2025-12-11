@@ -1,4 +1,4 @@
-Must use Python 3.12.8
+Must use Python 3.13
 
 This bot is being developed by Duziy. If you need help, have any suggestions, or wish to help me, feel free to private message me via Discord @ duziy. Feel free to submit pull request if you have suggestions and i'll take a look at it at some point.
 
