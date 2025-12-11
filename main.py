@@ -687,23 +687,26 @@ async def announce(interaction: discord.Interaction, *, message: Optional[str] =
 
 @bot.tree.command(name="clear", description="Clears the specified amount of messages.")
 @commands.has_permissions(manage_messages=True)
-async def clear(interaction, amount: int):
+async def clear(interaction: discord.Interaction, amount: int):
     if amount < 1 or amount > 100:
-        await interaction.response.send_message("Amount must be between 1 and 100.")
+        await interaction.response.send_message("Amount must be between 1 and 100.", ephemeral=True)
         return
 
-    # Acknowledge the command immediately
-    await interaction.response.defer()
-
-    # Perform the long-running task in the background
-    await asyncio.sleep(1)
-
-    deleted = await interaction.channel.purge(limit=amount)
+    await interaction.response.defer(ephemeral=True)
 
     try:
-        await interaction.followup.send("Deleted {} messages.".format(len(deleted)))
-    except discord.NotFound:
-        pass  # Ignore NotFound error if the original message is not found
+        deleted = await interaction.channel.purge(limit=amount)
+        await interaction.followup.send(f"Deleted {len(deleted)} messages.", ephemeral=True)
+    except discord.Forbidden:
+        await interaction.followup.send("I don't have permission to delete messages.", ephemeral=True)
+    except discord.HTTPException as e:
+        if e.status == 429:  # Rate limited
+            retry_after = e.retry_after
+            await asyncio.sleep(retry_after)
+            deleted = await interaction.channel.purge(limit=amount)
+            await interaction.followup.send(f"Deleted {len(deleted)} messages after a short delay.", ephemeral=True)
+        else:
+            await interaction.followup.send("An error occurred while deleting messages.", ephemeral=True)
 
 @bot.tree.command(name="kick", description="Kicks a user.")
 @commands.has_permissions(kick_members=True)
@@ -775,7 +778,7 @@ async def dog(interaction):
     embed.set_image(url=image)
     await interaction.response.send_message(embed=embed)
 
-@bot.tree.command(name="8ball", description="Asks the magic 8ball a question.")
+@bot.tree.command(name="eightball", description="Asks the magic eightball a question.")
 async def eightball(interaction, *, question: str):
     responses = [
         "It is certain.",
@@ -828,18 +831,24 @@ async def howgay(interaction, member: discord.Member = None):
     gay_percent = random.randint(0, 100)
     await interaction.response.send_message(f"{member.mention} is {gay_percent}% gay 🏳️‍🌈")
 
-@bot.tree.command(name="meme", description="Get a random meme from Imgur!")
+@bot.tree.command(name="meme", description="Get a random meme from Imgflip!")
 async def meme(interaction):
     async with aiohttp.ClientSession() as session:
-        async with session.get("https://www.reddit.com/r/memes/random/.json") as response:
+        async with session.get("https://api.imgflip.com/get_memes") as response:
             if response.status == 200:
-                meme_data = await response.json()
-                meme_url = meme_data[0]["data"]["children"][0]["data"]["url"]
-                
-                embed = discord.Embed(title="Random Meme")
-                embed.set_image(url=meme_url)
-                
-                await interaction.response.send_message(embed=embed)
+                data = await response.json()
+                memes = data["data"]["memes"]
+                if memes:
+                    random_meme = random.choice(memes)
+                    meme_url = random_meme["url"]
+
+                    embed = discord.Embed(title="Random Meme", color=discord.Color.blurple())
+                    embed.set_image(url=meme_url)
+                    embed.set_footer(text="Powered by Imgflip API")
+
+                    await interaction.response.send_message(embed=embed)
+                else:
+                    await interaction.response.send_message("No memes found. Try again later.")
             else:
                 await interaction.response.send_message("Failed to fetch a meme. Please try again later.")
 
