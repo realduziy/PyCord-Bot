@@ -5,7 +5,15 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from cog_utils import TicketConfig, ensure_guild_config, log_event, set_guild_setting
+from cog_utils import (
+    TicketConfig,
+    ensure_guild_config,
+    get_automod_exempt,
+    log_event,
+    mark_automod_deleted,
+    set_automod_exempt,
+    set_guild_setting,
+)
 
 INVITE_RE = re.compile(r"(?:discord\.gg/|discord(?:app)?\.com/invite/)([a-zA-Z0-9-]+)")
 LINK_RE = re.compile(r"https?://\S+|www\.\S+", re.IGNORECASE)
@@ -72,6 +80,9 @@ class AutoMod(commands.Cog):
         cfg = await TicketConfig.fetch(guild_id)
         if not cfg.automod_enabled:
             return
+        # Exempt channels (e.g. meme/advertising channels) skip auto-mod entirely
+        if str(message.channel.id) in await get_automod_exempt(guild_id):
+            return
 
         # Staff bypass: users with manage_messages skip auto-mod unless the
         # server turned the bypass off via /automod
@@ -91,6 +102,7 @@ class AutoMod(commands.Cog):
 
         try:
             await message.delete()
+            mark_automod_deleted(message.id)
         except (discord.Forbidden, discord.HTTPException):
             return
 
@@ -126,6 +138,9 @@ class AutoMod(commands.Cog):
         app_commands.Choice(name="Block invites (on/off)", value="invites"),
         app_commands.Choice(name="Block links (on/off)", value="links"),
         app_commands.Choice(name="Staff bypass (on/off)", value="staff_bypass"),
+        app_commands.Choice(name="Exempt channel add", value="exempt_add"),
+        app_commands.Choice(name="Exempt channel remove", value="exempt_remove"),
+        app_commands.Choice(name="Exempt channel list", value="exempt_list"),
         app_commands.Choice(name="Word add (comma separated ok)", value="word_add"),
         app_commands.Choice(name="Word remove (comma separated ok)", value="word_remove"),
         app_commands.Choice(name="Word list", value="word_list"),
@@ -154,6 +169,8 @@ class AutoMod(commands.Cog):
                             value="\u2705" if cfg.automod_block_links else "\u274c", inline=True)
             embed.add_field(name="Staff bypass",
                             value="\u2705" if cfg.automod_staff_bypass else "\u274c", inline=True)
+            exempt_ids = await get_automod_exempt(guild_id)
+            embed.add_field(name="Exempt channels", value=str(len(exempt_ids)), inline=True)
             words = ", ".join(cfg.automod_blocked_words) or "none"
             embed.add_field(name=f"Blocked words ({len(cfg.automod_blocked_words)})",
                             value=words[:1024], inline=False)
@@ -217,6 +234,46 @@ class AutoMod(commands.Cog):
             state = "will now be **removed**" if lowered == "on" else "are **allowed** again"
             thing = "Discord invites" if action.value == "invites" else "External links"
             await interaction.response.send_message(f"\u2705 {thing} {state}.", ephemeral=True)
+            return
+
+        if action.value in ("exempt_add", "exempt_remove"):
+            if not value:
+                await interaction.response.send_message(
+                    "Give a channel — mention it or paste its ID.", ephemeral=True)
+                return
+            import re
+            match = re.match(r"^(?:<#(\d+)>|(\d+))$", value.strip())
+            raw_id = int(match.group(1) or match.group(2)) if match else None
+            channel = interaction.guild.get_channel(raw_id) if raw_id else None
+            if channel is None:
+                await interaction.response.send_message(
+                    "Couldn't find that channel — mention it or paste its ID.",
+                    ephemeral=True)
+                return
+            if action.value == "exempt_add":
+                await set_automod_exempt(guild_id, str(channel.id), True)
+                await interaction.response.send_message(
+                    f"\u2705 {channel.mention} is now **exempt** from auto-moderation.",
+                    ephemeral=True)
+            else:
+                await set_automod_exempt(guild_id, str(channel.id), False)
+                await interaction.response.send_message(
+                    f"\u2705 {channel.mention} is no longer exempt — auto-mod applies there again.",
+                    ephemeral=True)
+            return
+
+        if action.value == "exempt_list":
+            ids = await get_automod_exempt(guild_id)
+            if not ids:
+                await interaction.response.send_message(
+                    "No exempt channels. Add one with `/automod` > **Exempt channel add**.",
+                    ephemeral=True)
+                return
+            mentions = [interaction.guild.get_channel(int(cid)) for cid in ids]
+            lines = [c.mention if c else f"`{cid}` (deleted)" for c, cid in zip(mentions, ids)]
+            embed = discord.Embed(title="\U0001f6e1\ufe0f Auto-Mod Exempt Channels",
+                                  description="\n".join(lines), color=0x5865f2)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
         if action.value == "staff_bypass":

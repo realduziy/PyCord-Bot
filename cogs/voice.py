@@ -4,6 +4,7 @@ import aiosqlite
 import discord
 from discord import app_commands
 from discord.ext import commands
+from discord.ui import Button, Modal, TextInput, View
 
 from cog_utils import DB_FILE, log_event
 
@@ -62,13 +63,15 @@ async def _list_hubs(guild_id: str) -> list:
             return await cur.fetchall()
 
 
-async def _add_temp(guild_id: str, channel_id: str, owner_id: str, hub_id: str):
+async def _add_temp(guild_id: str, channel_id: str, owner_id: str, hub_id: str,
+                    panel_message_id: str):
     async with aiosqlite.connect(DB_FILE) as db:
         await db.execute(
-            "INSERT OR REPLACE INTO voice_temps (channel_id, guild_id, owner_id, hub_id, created_at) "
-            "VALUES (?, ?, ?, ?, ?)",
+            "INSERT OR REPLACE INTO voice_temps "
+            "(channel_id, guild_id, owner_id, hub_id, created_at, panel_message_id) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
             (channel_id, guild_id, owner_id, hub_id,
-             datetime.datetime.now(datetime.timezone.utc).isoformat()))
+             datetime.datetime.now(datetime.timezone.utc).isoformat(), panel_message_id))
         await db.commit()
 
 
@@ -102,8 +105,188 @@ async def _all_temps(guild_id: str) -> list:
             return await cur.fetchall()
 
 
+# --- Control panel ---
+def _panel_embed(vc: discord.VoiceChannel, owner_id: str) -> discord.Embed:
+    everyone = vc.overwrites_for(vc.guild.default_role)
+    locked = everyone.connect is False
+    embed = discord.Embed(title=f"\U0001f50a {vc.name}", color=0x57f287)
+    embed.add_field(name="Owner", value=f"<@{owner_id}>", inline=True)
+    embed.add_field(name="Status", value="\U0001f512 Locked" if locked else "\U0001f513 Open",
+                    inline=True)
+    embed.add_field(name="User Limit",
+                    value=str(vc.user_limit) if vc.user_limit else "No limit", inline=True)
+    embed.add_field(name="Members", value=len(vc.members), inline=True)
+    embed.set_footer(text="Only the channel owner (or staff) can use these controls.")
+    embed.timestamp = datetime.datetime.now(datetime.timezone.utc)
+    return embed
+
+
+class RenameModal(Modal):
+    name = TextInput(label="New channel name", max_length=MAX_CHANNEL_NAME, required=True)
+
+    def __init__(self, cog):
+        super().__init__(title="Rename Channel", timeout=120)
+        self.cog = cog
+
+    async def on_submit(self, interaction: discord.Interaction):
+        vc, temp = await self.cog._panel_context(interaction, respond=True)
+        if vc is None:
+            return
+        await vc.edit(name=self.name.value.strip(), reason=f"Renamed by {interaction.user}")
+        await interaction.response.send_message(
+            f"\u2705 Channel renamed to **{vc.name}**.", ephemeral=True)
+        await self.cog._refresh_panel(vc, temp)
+
+
+class LimitModal(Modal):
+    limit = TextInput(label="User limit (0 = no limit)", placeholder="e.g. 5",
+                      max_length=2, required=True, default="0")
+
+    def __init__(self, cog):
+        super().__init__(title="Set User Limit", timeout=120)
+        self.cog = cog
+
+    async def on_submit(self, interaction: discord.Interaction):
+        vc, temp = await self.cog._panel_context(interaction, respond=True)
+        if vc is None:
+            return
+        value = self.limit.value.strip()
+        if not value.isdigit() or not 0 <= int(value) <= 99:
+            await interaction.response.send_message(
+                "Enter a number between 0 and 99.", ephemeral=True)
+            return
+        await vc.edit(user_limit=int(value), reason=f"Limit set by {interaction.user}")
+        await interaction.response.send_message(
+            f"\u2705 User limit set to {value if int(value) else 'no limit'}.",
+            ephemeral=True)
+        await self.cog._refresh_panel(vc, temp)
+
+
+class InviteModal(Modal):
+    user = TextInput(label="User to invite (mention or ID)",
+                     placeholder="@someone or 123456789", required=True)
+
+    def __init__(self, cog):
+        super().__init__(title="Invite User", timeout=120)
+        self.cog = cog
+
+    async def on_submit(self, interaction: discord.Interaction):
+        vc, temp = await self.cog._panel_context(interaction, respond=True)
+        if vc is None:
+            return
+        import re
+        match = re.match(r"^(?:<@!?(\d+)>|(\d+))$", self.user.value.strip())
+        raw_id = int(match.group(1) or match.group(2)) if match else None
+        target = interaction.guild.get_member(raw_id) if raw_id else None
+        if target is None:
+            await interaction.response.send_message(
+                "Couldn't find that user — use a mention or their ID.", ephemeral=True)
+            return
+        try:
+            await target.send(
+                f"\U0001f4e2 You've been invited to **{vc.name}** in "
+                f"**{interaction.guild.name}**! Join the voice channel when you're ready.")
+            sent = " They've been DMed."
+        except (discord.Forbidden, discord.HTTPException):
+            sent = " (Couldn't DM them — tell them to join manually!)"
+        await interaction.response.send_message(
+            f"\u2705 Invited {target.mention} to the channel.{sent}", ephemeral=True)
+
+
+class KickModal(Modal):
+    user = TextInput(label="User to kick (mention or ID)",
+                     placeholder="@someone or 123456789", required=True)
+
+    def __init__(self, cog):
+        super().__init__(title="Kick from Channel", timeout=120)
+        self.cog = cog
+
+    async def on_submit(self, interaction: discord.Interaction):
+        vc, temp = await self.cog._panel_context(interaction, respond=True)
+        if vc is None:
+            return
+        import re
+        match = re.match(r"^(?:<@!?(\d+)>|(\d+))$", self.user.value.strip())
+        raw_id = int(match.group(1) or match.group(2)) if match else None
+        target = interaction.guild.get_member(raw_id) if raw_id else None
+        if target is None or target not in vc.members:
+            await interaction.response.send_message(
+                "That user isn't in the voice channel.", ephemeral=True)
+            return
+        if target.id == int(temp["owner_id"]):
+            await interaction.response.send_message(
+                "You can't kick the channel owner.", ephemeral=True)
+            return
+        await target.move_to(None, reason=f"Kicked by {interaction.user}")
+        await interaction.response.send_message(
+            f"\U0001f6ab Kicked {target.mention} from the channel.", ephemeral=True)
+        await self.cog._refresh_panel(vc, temp)
+
+
+class ChannelControlsView(View):
+    """Persistent control panel posted in each temp channel's built-in chat."""
+
+    def __init__(self, cog):
+        super().__init__(timeout=None)
+        self.cog = cog
+
+    @discord.ui.button(label="Lock", style=discord.ButtonStyle.danger,
+                       emoji="\U0001f512", custom_id="voice_lock_btn")
+    async def lock(self, interaction: discord.Interaction, button: Button):
+        vc, temp = await self.cog._panel_context(interaction, respond=True)
+        if vc is None:
+            return
+        everyone = vc.overwrites_for(interaction.guild.default_role)
+        everyone.connect = False
+        await vc.set_permissions(interaction.guild.default_role, overwrite=everyone,
+                                 reason=f"Locked by {interaction.user}")
+        await interaction.response.send_message("\U0001f512 Channel locked.", ephemeral=True)
+        await self.cog._refresh_panel(vc, temp)
+
+    @discord.ui.button(label="Unlock", style=discord.ButtonStyle.success,
+                       emoji="\U0001f513", custom_id="voice_unlock_btn")
+    async def unlock(self, interaction: discord.Interaction, button: Button):
+        vc, temp = await self.cog._panel_context(interaction, respond=True)
+        if vc is None:
+            return
+        everyone = vc.overwrites_for(interaction.guild.default_role)
+        everyone.connect = None
+        await vc.set_permissions(interaction.guild.default_role, overwrite=everyone,
+                                 reason=f"Unlocked by {interaction.user}")
+        await interaction.response.send_message("\U0001f513 Channel unlocked.", ephemeral=True)
+        await self.cog._refresh_panel(vc, temp)
+
+    @discord.ui.button(label="Limit", style=discord.ButtonStyle.primary,
+                       emoji="\U0001f465", custom_id="voice_limit_btn")
+    async def limit(self, interaction: discord.Interaction, button: Button):
+        if (await self.cog._panel_context(interaction, respond=True)) == (None, None):
+            return
+        await interaction.response.send_modal(LimitModal(self.cog))
+
+    @discord.ui.button(label="Rename", style=discord.ButtonStyle.primary,
+                       emoji="\u270f\ufe0f", custom_id="voice_rename_btn")
+    async def rename(self, interaction: discord.Interaction, button: Button):
+        if (await self.cog._panel_context(interaction, respond=True)) == (None, None):
+            return
+        await interaction.response.send_modal(RenameModal(self.cog))
+
+    @discord.ui.button(label="Invite", style=discord.ButtonStyle.success,
+                       emoji="\U0001f4e9", custom_id="voice_invite_btn")
+    async def invite(self, interaction: discord.Interaction, button: Button):
+        if (await self.cog._panel_context(interaction, respond=True)) == (None, None):
+            return
+        await interaction.response.send_modal(InviteModal(self.cog))
+
+    @discord.ui.button(label="Kick", style=discord.ButtonStyle.danger,
+                       emoji="\U0001f6ab", custom_id="voice_kick_btn")
+    async def kick(self, interaction: discord.Interaction, button: Button):
+        if (await self.cog._panel_context(interaction, respond=True)) == (None, None):
+            return
+        await interaction.response.send_modal(KickModal(self.cog))
+
+
 class Voice(commands.Cog):
-    """Temporary voice channels: join a hub, get your own channel, gone when empty."""
+    """Temporary voice channels with VoiceMaster-style control panels."""
 
     def __init__(self, bot):
         self.bot = bot
@@ -122,23 +305,80 @@ class Voice(commands.Cog):
                         continue
                     await _remove_temp(temp["channel_id"])
 
+    # --- Panel helpers ---
+    async def _panel_context(self, interaction: discord.Interaction,
+                             respond: bool = False):
+        """Resolve the voice channel + temp row for a panel interaction.
+
+        The panel lives in the voice channel's built-in chat, so the channel
+        is simply interaction.channel.
+        """
+        guild = interaction.guild
+        temp = await _get_temp(str(interaction.channel.id))
+        if temp is None or temp["guild_id"] != str(guild.id):
+            if respond:
+                await interaction.response.send_message(
+                    "This control panel isn't attached to an active temp channel.",
+                    ephemeral=True)
+            return None, None
+        vc = guild.get_channel(int(temp["channel_id"]))
+        if vc is None:
+            await _remove_temp(temp["channel_id"])
+            if respond:
+                await interaction.response.send_message(
+                    "The voice channel no longer exists.", ephemeral=True)
+            return None, None
+        # Only the owner (or staff with manage_channels) may use the controls
+        is_owner = str(interaction.user.id) == temp["owner_id"]
+        if not is_owner and not interaction.user.guild_permissions.manage_channels:
+            if respond:
+                await interaction.response.send_message(
+                    "Only the channel owner can use these controls.", ephemeral=True)
+            return None, None
+        return vc, temp
+
+    async def _refresh_panel(self, vc: discord.VoiceChannel, temp):
+        """Update the pinned control embed after an action."""
+        if not temp or not temp["panel_message_id"]:
+            return
+        try:
+            message = await vc.fetch_message(int(temp["panel_message_id"]))
+            await message.edit(embed=_panel_embed(vc, temp["owner_id"]))
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            pass
+
     # --- Core logic ---
     async def _spawn_temp(self, member: discord.Member, hub: discord.VoiceChannel,
                           template: str):
-        """Create a temp channel for a member next to the hub and move them in."""
+        """Create a temp channel and post its control panel in the built-in chat."""
+        guild = member.guild
+        guild_id = str(guild.id)
         name = _render_name(template, member)
+
+        overwrites = _owner_overwrite(member)
+        overwrites[guild.default_role] = discord.PermissionOverwrite(view_channel=True)
         try:
-            temp = await member.guild.create_voice_channel(
-                name, category=hub.category, overwrites=_owner_overwrite(member),
+            temp = await guild.create_voice_channel(
+                name, category=hub.category, overwrites=overwrites,
                 reason=f"Temp channel for {member} (joined hub)")
         except (discord.Forbidden, discord.HTTPException):
             return None
 
-        await _add_temp(str(member.guild.id), str(temp.id), str(member.id), str(hub.id))
+        panel_message_id = ""
+        try:
+            panel = await temp.send(embed=_panel_embed(temp, str(member.id)),
+                                    view=ChannelControlsView(self))
+            await panel.pin(reason="Channel control panel")
+            panel_message_id = str(panel.id)
+        except (discord.Forbidden, discord.HTTPException):
+            pass  # voice channel still works without a panel
+
+        await _add_temp(guild_id, str(temp.id), str(member.id), str(hub.id),
+                        panel_message_id)
+
         try:
             await member.move_to(temp, reason="Moved to temp voice channel")
         except (discord.Forbidden, discord.HTTPException):
-            # Couldn't move them — remove the channel we just made
             try:
                 await temp.delete(reason="Member could not be moved")
             except (discord.Forbidden, discord.HTTPException):
@@ -151,7 +391,7 @@ class Voice(commands.Cog):
         embed.add_field(name="Owner", value=f"{member} (`{member.id}`)", inline=True)
         embed.add_field(name="Hub", value=hub.name, inline=True)
         embed.timestamp = datetime.datetime.now(datetime.timezone.utc)
-        await log_event(member.guild, "voice", embed)
+        await log_event(guild, "voice", embed)
         return temp
 
     async def _delete_temp(self, channel: discord.VoiceChannel):
@@ -178,6 +418,7 @@ class Voice(commands.Cog):
                                           reason="Temp channel ownership transferred")
         except (discord.Forbidden, discord.HTTPException):
             pass
+        await self._refresh_panel(channel, await _get_temp(str(channel.id)))
 
     # --- Events ---
     @commands.Cog.listener()
@@ -218,7 +459,6 @@ class Voice(commands.Cog):
         guild_id = str(interaction.guild.id)
 
         if channel:
-            # Turn an existing channel into a hub
             raw_id = None
             if channel.strip().isdigit():
                 raw_id = int(channel.strip())
@@ -244,10 +484,9 @@ class Voice(commands.Cog):
             await _add_hub(guild_id, str(existing.id), DEFAULT_TEMPLATE)
             await interaction.response.send_message(
                 f"\u2705 {existing.mention} is now a hub — anyone who joins gets their own "
-                f"temp channel (named like `John's Lounge`).", ephemeral=True)
+                f"temp channel with a control panel in its chat.", ephemeral=True)
             return
 
-        # No channel given: create a new hub channel
         await interaction.response.defer(ephemeral=True)
         new_channel = await interaction.guild.create_voice_channel(
             name or DEFAULT_HUB_NAME, category=interaction.channel.category,
@@ -256,7 +495,7 @@ class Voice(commands.Cog):
         await interaction.followup.send(
             f"\u2705 Hub created: {new_channel.mention}\n"
             "Rename it anytime like a normal channel. Members who join get their own "
-            f"temp channel (named like `John's Lounge`).", ephemeral=True)
+            "temp channel with a control panel in its chat.", ephemeral=True)
 
     @app_commands.command(name="voicehubremove", description="Remove a voice hub (the channel itself stays).")
     @app_commands.checks.has_permissions(manage_channels=True)

@@ -1,6 +1,8 @@
+import asyncio
 import datetime
 import json
 import logging
+import sqlite3
 
 import aiohttp
 import aiosqlite
@@ -11,6 +13,8 @@ log = logging.getLogger("duziy-bot.db")
 
 dir_path = Path(__file__).parent.absolute()
 DB_FILE = dir_path / "bot_data.db"
+BACKUP_DIR = dir_path / "backups"
+BACKUP_KEEP = 7  # rolling number of backups to retain
 
 # --- Shared HTTP session (one TCP/TLS pool instead of one per request) ---
 _session: aiohttp.ClientSession | None = None
@@ -140,6 +144,10 @@ async def init_db():
             "guild_id TEXT, user_id TEXT, result TEXT, attempts INTEGER DEFAULT 1, "
             "last_at TEXT, PRIMARY KEY (guild_id, user_id, result))"
         )
+        await db.execute(  # auto-mod exempt channels (invites/links allowed there)
+            "CREATE TABLE IF NOT EXISTS automod_exempt ("
+            "guild_id TEXT, channel_id TEXT, PRIMARY KEY (guild_id, channel_id))"
+        )
         await db.execute(  # voice hubs: join these to spawn a temp channel
             "CREATE TABLE IF NOT EXISTS voice_hubs ("
             "guild_id TEXT, channel_id TEXT, name_template TEXT, "
@@ -150,6 +158,7 @@ async def init_db():
             "channel_id TEXT PRIMARY KEY, guild_id TEXT, owner_id TEXT, "
             "hub_id TEXT, created_at TEXT)"
         )
+        await _ensure_columns(db, "voice_temps", {"panel_message_id": "TEXT"})
         await db.commit()
 
 
@@ -163,14 +172,36 @@ async def _ensure_columns(db, table: str, columns: dict):
 
 # --- Event names used by the customizable logging system ---
 LOG_EVENTS = {
-    "mod": "Moderation actions",
+    "mod": "Moderation & Punishments",
     "automod": "Auto-Moderation",
     "tickets": "Tickets",
     "verification": "Verification",
-    "members": "Joins / Leaves",
+    "members": "Joins / Leaves / Profile",
+    "channels": "Channel Created / Edited / Deleted",
+    "roles": "Role Created / Edited / Deleted",
+    "messages": "Message Edits / Deletes",
+    "server": "Invites & Server Changes",
     "lockdown": "Lockdowns",
     "voice": "Voice Channels",
 }
+
+# Message IDs deleted by auto-mod, so the delete-logger doesn't double-log them.
+# Capped loosely; old IDs are dropped when the set grows too large.
+_automod_deleted: set[int] = set()
+
+
+def mark_automod_deleted(message_id: int):
+    if len(_automod_deleted) > 5000:
+        _automod_deleted.clear()
+    _automod_deleted.add(message_id)
+
+
+def consume_automod_deleted(message_id: int) -> bool:
+    """True once per ID — lets the message-delete logger skip auto-mod deletions."""
+    if message_id in _automod_deleted:
+        _automod_deleted.discard(message_id)
+        return True
+    return False
 
 
 async def is_log_event_enabled(guild_id: str, event: str) -> bool:
@@ -250,20 +281,34 @@ class TicketConfig:
 
 # --- Logging ---
 async def log_event(guild: discord.Guild, event: str, embed: discord.Embed) -> bool:
-    """Send an embed to the guild's log channel, respecting per-event toggles."""
+    """Send an embed to the guild's log channel, respecting per-event toggles.
+
+    Failures are logged to the console (not silently swallowed) so a
+    misconfigured log channel is easy to spot.
+    """
     guild_id = str(guild.id)
     if not await is_log_event_enabled(guild_id, event):
         return False
     cfg = await TicketConfig.fetch(guild_id)
     if not cfg.log_channel:
+        log.warning("log_event (%s): no log channel configured for guild %s", event, guild_id)
         return False
     channel = guild.get_channel(cfg.log_channel)
     if not channel:
+        log.warning("log_event (%s): configured log channel %s no longer exists in guild %s",
+                    event, cfg.log_channel, guild_id)
         return False
     try:
         await channel.send(embed=embed)
         return True
-    except (discord.Forbidden, discord.HTTPException):
+    except discord.Forbidden:
+        log.warning("log_event (%s): missing permissions in log channel %s (guild %s) — "
+                    "the bot needs Send Messages and Embed Links",
+                    event, channel.id, guild_id)
+        return False
+    except discord.HTTPException as e:
+        log.warning("log_event (%s): failed to send to log channel %s (guild %s): %s",
+                    event, channel.id, guild_id, e)
         return False
 
 
@@ -423,6 +468,67 @@ async def get_all_active_lockdowns(guild_id: str) -> list[str]:
             (guild_id,),
         ) as cursor:
             return [row[0] for row in await cursor.fetchall()]
+
+
+# --- Auto-mod exemptions ---
+async def get_automod_exempt(guild_id: str) -> list[str]:
+    async with aiosqlite.connect(DB_FILE) as db:
+        async with db.execute(
+            "SELECT channel_id FROM automod_exempt WHERE guild_id = ? ORDER BY channel_id",
+            (guild_id,)
+        ) as cursor:
+            return [row[0] for row in await cursor.fetchall()]
+
+
+async def set_automod_exempt(guild_id: str, channel_id: str, exempt: bool):
+    async with aiosqlite.connect(DB_FILE) as db:
+        if exempt:
+            await db.execute(
+                "INSERT OR IGNORE INTO automod_exempt (guild_id, channel_id) VALUES (?, ?)",
+                (guild_id, channel_id))
+        else:
+            await db.execute(
+                "DELETE FROM automod_exempt WHERE guild_id = ? AND channel_id = ?",
+                (guild_id, channel_id))
+        await db.commit()
+
+
+# --- Database backups ---
+async def backup_database() -> Path | None:
+    """Snapshot bot_data.db using SQLite's online backup API (safe while running).
+
+    Keeps the newest BACKUP_KEEP snapshots and prunes the rest.
+    Returns the backup path, or None on failure.
+    """
+    BACKUP_DIR.mkdir(exist_ok=True)
+    stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d_%H%M%S")
+    dest = BACKUP_DIR / f"bot_data_{stamp}.db"
+
+    def _copy():
+        source = sqlite3.connect(DB_FILE)
+        try:
+            target = sqlite3.connect(dest)
+            try:
+                source.backup(target)
+            finally:
+                target.close()
+        finally:
+            source.close()
+
+    try:
+        await asyncio.to_thread(_copy)
+    except sqlite3.Error as e:
+        log.error("Database backup failed: %s", e)
+        return None
+
+    # Prune old backups, keep the newest BACKUP_KEEP
+    backups = sorted(BACKUP_DIR.glob("bot_data_*.db"), reverse=True)
+    for old in backups[BACKUP_KEEP:]:
+        try:
+            old.unlink()
+        except OSError:
+            pass
+    return dest
 
 
 # --- Stale reference cleanup ---

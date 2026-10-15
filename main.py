@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import sys
+from logging.handlers import RotatingFileHandler
 
 import discord
 from discord import app_commands
@@ -19,7 +20,9 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler("bot.log", encoding="utf-8"),
+        # Rotate at ~5 MB, keep 3 old files so bot.log never grows forever
+        RotatingFileHandler("bot.log", encoding="utf-8", maxBytes=5 * 1024 * 1024,
+                            backupCount=3),
     ],
 )
 log = logging.getLogger("duziy-bot")
@@ -29,7 +32,9 @@ intents = discord.Intents.all()
 
 class DuziyBot(commands.Bot):
     def __init__(self):
-        super().__init__(command_prefix=".", intents=intents)
+        # max_messages: bigger cache = deleted/edited message content is
+        # recoverable for longer (default is only 1000)
+        super().__init__(command_prefix=".", intents=intents, max_messages=10000)
 
     async def setup_hook(self):
         """Runs ONCE before login: DB init, cogs, persistent views, sync."""
@@ -41,9 +46,13 @@ class DuziyBot(commands.Bot):
         # Persistent views must be registered before any interactions arrive
         from cogs.tickets import TicketControlsView, TicketPanelView
         from cogs.verification import VerifyPanelView
+        from cogs.voice import ChannelControlsView
         self.add_view(TicketPanelView())
         self.add_view(TicketControlsView())
         self.add_view(VerifyPanelView())
+        voice_cog = self.get_cog("Voice")
+        if voice_cog is not None:
+            self.add_view(ChannelControlsView(voice_cog))
 
         # Global slash-command error handling from the start
         self.tree.on_error = self.handle_app_error

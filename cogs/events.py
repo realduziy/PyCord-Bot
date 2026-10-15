@@ -12,6 +12,7 @@ from discord.ui import Button, View
 
 from cog_utils import (
     TicketConfig,
+    backup_database,
     cleanup_stale_entries,
     ensure_guild_config,
     log_event,
@@ -123,9 +124,11 @@ class Events(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.db_cleanup.start()
+        self.db_backup.start()
 
     def cog_unload(self):
         self.db_cleanup.cancel()
+        self.db_backup.cancel()
 
     @tasks.loop(hours=6)
     async def db_cleanup(self):
@@ -136,6 +139,17 @@ class Events(commands.Cog):
 
     @db_cleanup.before_loop
     async def before_db_cleanup(self):
+        await self.bot.wait_until_ready()
+
+    @tasks.loop(hours=24)
+    async def db_backup(self):
+        """Snapshot the database once a day; keeps the newest 7 snapshots."""
+        dest = await backup_database()
+        if dest is not None:
+            log.info("Daily database backup saved: %s", dest.name)
+
+    @db_backup.before_loop
+    async def before_db_backup(self):
         await self.bot.wait_until_ready()
 
     @commands.Cog.listener()
@@ -316,6 +330,21 @@ class Events(commands.Cog):
             inline=False,
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @app_commands.command(name="backup", description="Create a backup of the bot database right now.")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def backup_now(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        dest = await backup_database()
+        if dest is None:
+            await interaction.followup.send(
+                "\u274c Backup failed — check the console for details.", ephemeral=True)
+            return
+        size_kb = dest.stat().st_size // 1024
+        await interaction.followup.send(
+            f"\U0001f4be Backup created: `{dest.name}` ({size_kb} KB)\n"
+            f"Saved to the `backups/` folder — the newest 7 snapshots are kept.",
+            ephemeral=True)
 
     @app_commands.command(name="cleanupdb", description="Remove database entries pointing at deleted channels, roles or guilds.")
     @app_commands.checks.has_permissions(administrator=True)
