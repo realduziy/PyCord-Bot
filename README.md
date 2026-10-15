@@ -38,7 +38,8 @@ A multipurpose Discord bot coded in Python using [discord.py](https://github.com
 | 🛡️ **Auto-Moderation** | Configurable filters for blocked words (with comma-separated batch add/remove), Discord invites, external links, excessive caps, mass mentions, and message spam — with an optional staff permission bypass. |
 | 🎟️ **Verification System** | Captcha or one-click verification with full success/failure logging, statistics, and manual verification for staff. |
 | 🔒 **Lockdown System** | Lock channels instantly — pick defaults with `/lockdown defaults`, or fall back to the current channel. Previous permission states are restored on unlock. |
-| 🎙️ **Temporary Voice Channels** | VoiceMaster-style hubs: join a hub channel to spawn your own temp voice channel, ownership transfers when you leave, and empty channels are deleted automatically. |
+| 🎙️ **Temporary Voice Channels** | VoiceMaster-style hubs: join a hub channel to spawn your own temp channel (named `User's Lounge`), ownership transfers when you leave, and empty channels are deleted automatically. Use an existing channel or create a new hub — no templates needed. |
+| 🧹 **Self-Maintaining Database** | Automatically removes stale entries (deleted channels, roles, guilds) on startup and every 6 hours — or run `/cleanupdb` anytime to see what was pruned. |
 | 🔨 **Moderation Tools** | Mute, kick, ban, unban, unmute, message purge, and a persistent mod-case history. |
 
 ---
@@ -73,7 +74,7 @@ python main.py
 ```
 
 > [!TIP]
-> The database (`bot_data.db`) is created and migrated automatically on first run — no manual setup needed. Your data is preserved between updates.
+> The database (`bot_data.db`) is created and migrated automatically on first run — no manual setup needed. Your data is preserved between updates, and stale references (deleted channels/roles) are cleaned up automatically every 6 hours. Use `/cleanupdb` to run a cleanup on demand.
 
 ---
 
@@ -96,6 +97,7 @@ Once the bot is in your server, configure it with slash commands:
 | `/set` | Configure any bot setting (channels, roles, messages) |
 | `/setup` | Show a configuration checklist for this server |
 | `/setup auto` | Automatically create and configure channels/roles/categories |
+| `/cleanupdb` | Remove database entries pointing at deleted channels/roles/guilds |
 | `/help` | Show all available commands |
 
 ### Moderation
@@ -132,7 +134,7 @@ Once the bot is in your server, configure it with slash commands:
 ### Voice Channels
 | Command | Description |
 | --- | --- |
-| `/voicehub` | Create a hub — joining it spawns a personal temp channel |
+| `/voicehub [channel] [name]` | Create a hub, or turn an existing voice channel into one (by mention or ID). New hubs default to `➕ Join to Create` and can be renamed like any channel |
 | `/voicehubremove` | Remove hub status from a channel |
 | `/voicehubs` | List all hubs |
 | `/voicecleanup` | Delete all empty temp channels |
