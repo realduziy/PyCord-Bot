@@ -48,6 +48,18 @@ class DuziyBot(commands.Bot):
         # Global slash-command error handling from the start
         self.tree.on_error = self.handle_app_error
 
+        # Commands are server-only: each server's config is keyed by guild ID,
+        # and DM usage would just error on missing guild data.
+        async def guild_only_check(interaction: discord.Interaction) -> bool:
+            if interaction.guild is None:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(
+                        "\U0001f4e2 This bot only works inside servers — "
+                        "invite it and use the commands there.", ephemeral=True)
+                return False
+            return True
+        self.tree.interaction_check = guild_only_check
+
         synced = await self.tree.sync()
         log.info("Slash commands synced: %d", len(synced))
 
