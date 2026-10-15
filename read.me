@@ -1,0 +1,79 @@
+# PyCord-Bot
+
+A multipurpose Discord bot coded in Python using [discord.py](https://github.com/Rapptz/discord.py).
+
+> [!NOTE]
+> This bot is in active development. Most of the code was put together with the help of AI, Stack Overflow, and YouTube tutorials!
+
+---
+
+* **Contributions:** Feel free to DM me with suggestions or submit a pull request on GitHub, and I'll take a look at it when I get the chance.
+
+---
+
+## ⚡ Key Features
+
+* **Modular Cog Architecture:** The codebase is fully organized into Cogs for cleaner code and easier maintenance.
+* **One-Click Server Setup:** `/setup auto` creates and configures channels, roles, and categories automatically — or use `/setup` to check what's missing and `/set` to configure individual settings.
+* **Ticket System:** Full ticketing workflow — support panel with category selection, ticket claiming (with leaderboard), close-reason modal, automatic transcripts sent to a custom channel, blacklisting, and ticket statistics.
+* **Customizable Logging:** Every loggable event (moderation, auto-mod, tickets, verification, joins/leaves, lockdowns) can be toggled on or off per server with `/logsettings`.
+* **Auto-Moderation:** Configurable filters for blocked words (with comma-separated batch add/remove), Discord invites, external links, excessive caps, mass mentions, and message spam — with an optional staff permission bypass.
+* **Verification System:** Captcha or one-click verification with full success/failure logging, statistics (`/verificationstats`), and manual verification for staff.
+* **Lockdown System:** Lock channels instantly — pick defaults with `/lockdown defaults`, or fall back to the current channel. Previous permission states are restored on unlock.
+* **Moderation Tools:** Mute, kick, ban, unban, unmute, message purge, and a persistent mod-case history (`/cases`).
+
+---
+
+## 📦 Installation & Setup
+
+Make sure you have **Python 3.10 or newer** installed on your system.
+
+1. Place the bot files in a folder and put your `requirements.txt` alongside them.
+2. Open your terminal in that folder and run:
+
+pip install -r requirements.txt --upgrade
+
+3. Create a `.env` file in the project folder containing your bot token:
+
+```
+TOKEN=your_token_here
+```
+
+4. Start the bot:
+
+```
+python main.py
+```
+
+> The database (`bot_data.db`) is created and migrated automatically on first run — no manual setup needed. Your data is preserved between updates.
+
+### Troubleshooting Installation
+
+* **If the first command fails, try:**
+
+python -m pip install -r requirements.txt --upgrade
+
+* **Make sure pip is fully updated:**
+
+python -m pip install --upgrade pip
+
+* **Still having issues?** Try completely uninstalling Python and grabbing the newest version directly from the [Python Downloads Page](https://www.python.org/downloads/).
+
+---
+
+## 🐛 Bug Reports
+
+If you find a bug, let me know via Discord (`@duziy`) or open an issue on GitHub. Please note that updates aren't frequent, so a fix might take some time to roll out!
+
+---
+
+## 📋 To-Do List
+
+- [x] **Refactor to Cogs:** Converted the entire codebase over to Cogs for cleaner structure and organization.
+- [x] **Setup Command:** Added a quick setup command for server configuration.
+- [x] **Ticket System Updates:** Made progress expanding and refining the ticket system.
+- [x] **Logging System:** Full expansion complete — auto-moderation logs, custom ticket transcript channels, verification logs, member join/leave logs, and per-event toggles (`/logsettings`).
+- [x] **Auto-Moderation:** Fully customizable filters with logged events, batch word management, and a toggleable staff bypass.
+- [x] **Verification System:** Tracks and logs successful/failed verifications, with captcha or one-click modes and statistics.
+- [x] **Lockdown Command:** Overhauled — configurable default channels, current-channel fallback, and automatic restoration of previous permissions.
+- [ ] **Music Integration:** Add support for Spotify and YouTube playback.
