@@ -40,8 +40,13 @@ class DuziyBot(commands.Bot):
 
         # Persistent views must be registered before any interactions arrive
         from cogs.tickets import TicketControlsView, TicketPanelView
+        from cogs.verification import VerifyPanelView
         self.add_view(TicketPanelView())
         self.add_view(TicketControlsView())
+        self.add_view(VerifyPanelView())
+
+        # Global slash-command error handling from the start
+        self.tree.on_error = self.handle_app_error
 
         synced = await self.tree.sync()
         log.info("Slash commands synced: %d", len(synced))
@@ -76,8 +81,8 @@ class DuziyBot(commands.Bot):
             pass
 
     async def on_ready(self):
-        self.tree.on_error = self.handle_app_error
-        log.info("Logged in as %s (ID: %s) | discord.py %s", self.user, self.user.id, discord.__version__)
+        log.info("Logged in as %s (ID: %s) | discord.py %s",
+                 self.user, self.user.id, discord.__version__)
 
 
 async def main():

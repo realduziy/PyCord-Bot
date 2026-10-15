@@ -246,6 +246,10 @@ class Fun(commands.Cog):
         category_titles = {
             "Events": "\u2699\ufe0f Utilities",
             "Moderation": "\U0001f6e1\ufe0f Moderation",
+            "Logging": "\U0001f4cb Logging",
+            "AutoMod": "\U0001f6e1\ufe0f Auto-Moderation",
+            "Verification": "\U0001f39f\ufe0f Verification",
+            "Voice": "\U0001f50a Voice",
             "Fun": "\U0001f3ae Fun & Info",
             "Tickets": "\U0001f3ab Tickets",
         }

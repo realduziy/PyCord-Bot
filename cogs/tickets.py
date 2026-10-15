@@ -18,7 +18,7 @@ from cog_utils import (
     increment_claim,
     increment_closed,
     is_blacklisted,
-    log_action,
+    log_event,
     set_blacklisted,
     set_guild_setting,
 )
@@ -148,7 +148,7 @@ async def perform_close(channel: discord.TextChannel, reason: str, closer: str,
     log_embed.add_field(name="Closed by", value=closer, inline=True)
     log_embed.add_field(name="Reason", value=reason, inline=True)
     log_embed.add_field(name="Opened by", value=f"{ticket_info['user_name']} (<@{ticket_info['user_id']}>)", inline=True)
-    await log_action(guild, log_embed)
+    await log_event(guild, "tickets", log_embed)
 
     if interaction:
         await interaction.followup.send("Ticket closed \u2014 transcript saved. Deleting channel in 3 seconds...",
@@ -291,7 +291,7 @@ class TicketCategorySelect(Select):
         open_log.add_field(name="User", value=f"{interaction.user} (<@{interaction.user.id}>)", inline=True)
         open_log.add_field(name="Category", value=category_titles.get(selected_category, selected_category), inline=True)
         open_log.add_field(name="Channel", value=ticket_channel.mention, inline=True)
-        await log_action(guild, open_log)
+        await log_event(guild, "tickets", open_log)
 
         if support_role:
             try:
@@ -390,7 +390,7 @@ class TicketControlsView(View):
         claim_log = ticket_log_embed("\u270b Ticket Claimed", 0x5865f2)
         claim_log.add_field(name="Channel", value=channel.name, inline=True)
         claim_log.add_field(name="Claimed by", value=f"{interaction.user} (<@{interaction.user.id}>)", inline=True)
-        await log_action(guild, claim_log)
+        await log_event(guild, "tickets", claim_log)
 
     @discord.ui.button(label="Request Close", style=discord.ButtonStyle.secondary,
                        emoji="\U0001f64b\u200d\u2642\ufe0f", custom_id="request_close_btn")

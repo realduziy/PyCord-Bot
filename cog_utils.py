@@ -1,4 +1,5 @@
 import datetime
+import json
 import logging
 
 import aiohttp
@@ -42,6 +43,12 @@ COLUMNS = {
     "join_channel", "leave_channel", "join_message", "leave_message",
     "log_channel", "ticket_panel_channel", "transcripts_channel",
     "ticket_support_role", "ticket_category",
+    # verification
+    "verified_role", "verify_channel", "verification_enabled", "verify_mode",
+    # auto-moderation
+    "automod_enabled", "automod_caps_percent", "automod_max_mentions",
+    "automod_block_invites", "automod_block_links", "automod_blocked_words",
+    "automod_staff_bypass",
 }
 
 
@@ -67,18 +74,34 @@ async def init_db():
             "join_message TEXT DEFAULT 'Welcome {user} to the server! You are the {member_count}th member.', "
             "leave_message TEXT DEFAULT '{user} has left the server', "
             "log_channel INTEGER, ticket_panel_channel INTEGER, transcripts_channel INTEGER, "
-            "ticket_support_role INTEGER, ticket_category INTEGER)"
+            "ticket_support_role INTEGER, ticket_category INTEGER, "
+            # verification system
+            "verified_role INTEGER, verify_channel INTEGER, verification_enabled INTEGER DEFAULT 0, "
+            "verify_mode TEXT DEFAULT 'captcha', "
+            # auto-moderation (0 / NULL means a module is off)
+            "automod_enabled INTEGER DEFAULT 0, automod_caps_percent INTEGER DEFAULT 0, "
+            "automod_max_mentions INTEGER DEFAULT 0, automod_block_invites INTEGER DEFAULT 0, "
+            "automod_block_links INTEGER DEFAULT 0, automod_blocked_words TEXT DEFAULT '[]', "
+            "automod_staff_bypass INTEGER DEFAULT 1)"
         )
         await db.execute(  # tickets
             "CREATE TABLE IF NOT EXISTS tickets ("
             "channel_id TEXT PRIMARY KEY, guild_id TEXT, user_id TEXT, user_name TEXT, "
             "created_at TEXT, claimed_by TEXT)"
         )
-        # Ensure 'claimed_by' column exists if upgrading an older database
-        async with db.execute("PRAGMA table_info(tickets)") as cur:
-            ticket_columns = [row[1] for row in await cur.fetchall()]
-        if "claimed_by" not in ticket_columns:
-            await db.execute("ALTER TABLE tickets ADD COLUMN claimed_by TEXT")
+        # Ensure columns exist if upgrading an older database
+        await _ensure_columns(db, "tickets", {"claimed_by": "TEXT"})
+        await _ensure_columns(db, "guild_settings", {
+            "verified_role": "INTEGER", "verify_channel": "INTEGER",
+            "verification_enabled": "INTEGER DEFAULT 0",
+            "verify_mode": "TEXT DEFAULT 'captcha'",
+            "automod_enabled": "INTEGER DEFAULT 0", "automod_caps_percent": "INTEGER DEFAULT 0",
+            "automod_max_mentions": "INTEGER DEFAULT 0",
+            "automod_block_invites": "INTEGER DEFAULT 0",
+            "automod_block_links": "INTEGER DEFAULT 0",
+            "automod_blocked_words": "TEXT DEFAULT '[]'",
+            "automod_staff_bypass": "INTEGER DEFAULT 1",
+        })
 
         await db.execute(  # ticket_blacklist
             "CREATE TABLE IF NOT EXISTS ticket_blacklist ("
@@ -97,6 +120,75 @@ async def init_db():
             "CREATE TABLE IF NOT EXISTS mod_cases ("
             "case_id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id TEXT, action TEXT, "
             "actor_id TEXT, target_id TEXT, reason TEXT, created_at TEXT)"
+        )
+        await db.execute(  # lockdown default channels (multi-select targets)
+            "CREATE TABLE IF NOT EXISTS lockdown_channels ("
+            "guild_id TEXT, channel_id TEXT, PRIMARY KEY (guild_id, channel_id))"
+        )
+        await db.execute(  # active lockdowns, so unlock restores the previous state
+            "CREATE TABLE IF NOT EXISTS active_lockdowns ("
+            "guild_id TEXT, channel_id TEXT, prev_send INTEGER, locked_by TEXT, "
+            "locked_at TEXT, PRIMARY KEY (guild_id, channel_id))"
+        )
+        await db.execute(  # customizable log events (missing row = enabled)
+            "CREATE TABLE IF NOT EXISTS log_settings ("
+            "guild_id TEXT, event TEXT, enabled INTEGER DEFAULT 1, "
+            "PRIMARY KEY (guild_id, event))"
+        )
+        await db.execute(  # verification attempts (success/failure tracking)
+            "CREATE TABLE IF NOT EXISTS verification_attempts ("
+            "guild_id TEXT, user_id TEXT, result TEXT, attempts INTEGER DEFAULT 1, "
+            "last_at TEXT, PRIMARY KEY (guild_id, user_id, result))"
+        )
+        await db.execute(  # voice hubs: join these to spawn a temp channel
+            "CREATE TABLE IF NOT EXISTS voice_hubs ("
+            "guild_id TEXT, channel_id TEXT, name_template TEXT, "
+            "PRIMARY KEY (guild_id, channel_id))"
+        )
+        await db.execute(  # active temp voice channels + their owner
+            "CREATE TABLE IF NOT EXISTS voice_temps ("
+            "channel_id TEXT PRIMARY KEY, guild_id TEXT, owner_id TEXT, "
+            "hub_id TEXT, created_at TEXT)"
+        )
+        await db.commit()
+
+
+async def _ensure_columns(db, table: str, columns: dict):
+    async with db.execute(f"PRAGMA table_info({table})") as cur:
+        existing = {row[1] for row in await cur.fetchall()}
+    for name, ddl in columns.items():
+        if name not in existing:
+            await db.execute(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")
+
+
+# --- Event names used by the customizable logging system ---
+LOG_EVENTS = {
+    "mod": "Moderation actions",
+    "automod": "Auto-Moderation",
+    "tickets": "Tickets",
+    "verification": "Verification",
+    "members": "Joins / Leaves",
+    "lockdown": "Lockdowns",
+    "voice": "Voice Channels",
+}
+
+
+async def is_log_event_enabled(guild_id: str, event: str) -> bool:
+    async with aiosqlite.connect(DB_FILE) as db:
+        async with db.execute(
+            "SELECT enabled FROM log_settings WHERE guild_id = ? AND event = ?",
+            (guild_id, event),
+        ) as cursor:
+            row = await cursor.fetchone()
+    return row is None or bool(row[0])  # default: enabled
+
+
+async def set_log_event(guild_id: str, event: str, enabled: bool):
+    async with aiosqlite.connect(DB_FILE) as db:
+        await db.execute(
+            "INSERT INTO log_settings (guild_id, event, enabled) VALUES (?, ?, ?) "
+            "ON CONFLICT(guild_id, event) DO UPDATE SET enabled = excluded.enabled",
+            (guild_id, event, int(enabled)),
         )
         await db.commit()
 
@@ -123,6 +215,23 @@ class TicketConfig:
         self.transcripts_channel = row["transcripts_channel"]
         self.ticket_support_role = row["ticket_support_role"]
         self.ticket_category = row["ticket_category"]
+        # verification
+        self.verified_role = row["verified_role"]
+        self.verify_channel = row["verify_channel"]
+        self.verification_enabled = bool(row["verification_enabled"])
+        self.verify_mode = row["verify_mode"] or "captcha"  # "captcha" or "click"
+        # auto-moderation
+        self.automod_enabled = bool(row["automod_enabled"])
+        self.automod_caps_percent = row["automod_caps_percent"] or 0
+        self.automod_max_mentions = row["automod_max_mentions"] or 0
+        self.automod_block_invites = bool(row["automod_block_invites"])
+        self.automod_block_links = bool(row["automod_block_links"])
+        # whether users with manage_messages bypass auto-mod (default: yes)
+        self.automod_staff_bypass = bool(row["automod_staff_bypass"]) if row["automod_staff_bypass"] is not None else True
+        try:
+            self.automod_blocked_words = json.loads(row["automod_blocked_words"] or "[]")
+        except (json.JSONDecodeError, TypeError):
+            self.automod_blocked_words = []
 
     @classmethod
     async def fetch(cls, guild_id: str):
@@ -135,11 +244,17 @@ class TicketConfig:
             return await cls.fetch(guild_id)
         return cls(row)
 
+    async def save_automod_words(self, words: list):
+        await set_guild_setting(self.guild_id, "automod_blocked_words", json.dumps(words))
 
-# --- Mod log ---
-async def log_action(guild: discord.Guild, embed: discord.Embed) -> bool:
-    """Send an embed to the guild's configured log channel. Returns True if sent."""
-    cfg = await TicketConfig.fetch(str(guild.id))
+
+# --- Logging ---
+async def log_event(guild: discord.Guild, event: str, embed: discord.Embed) -> bool:
+    """Send an embed to the guild's log channel, respecting per-event toggles."""
+    guild_id = str(guild.id)
+    if not await is_log_event_enabled(guild_id, event):
+        return False
+    cfg = await TicketConfig.fetch(guild_id)
     if not cfg.log_channel:
         return False
     channel = guild.get_channel(cfg.log_channel)
@@ -150,6 +265,11 @@ async def log_action(guild: discord.Guild, embed: discord.Embed) -> bool:
         return True
     except (discord.Forbidden, discord.HTTPException):
         return False
+
+
+async def log_action(guild: discord.Guild, embed: discord.Embed) -> bool:
+    """Backward-compatible wrapper: moderation-flavored events."""
+    return await log_event(guild, "mod", embed)
 
 
 # --- Mod cases ---
@@ -229,3 +349,189 @@ async def increment_closed(guild_id: str):
             "UPDATE ticket_metrics SET closed_count = closed_count + 1 WHERE guild_id = ?", (guild_id,)
         )
         await db.commit()
+
+
+# --- Lockdown helpers ---
+async def get_lockdown_channels(guild_id: str) -> list[str]:
+    async with aiosqlite.connect(DB_FILE) as db:
+        async with db.execute(
+            "SELECT channel_id FROM lockdown_channels WHERE guild_id = ? ORDER BY channel_id",
+            (guild_id,)
+        ) as cursor:
+            return [row[0] for row in await cursor.fetchall()]
+
+
+async def add_lockdown_channel(guild_id: str, channel_id: str):
+    async with aiosqlite.connect(DB_FILE) as db:
+        await db.execute(
+            "INSERT OR IGNORE INTO lockdown_channels (guild_id, channel_id) VALUES (?, ?)",
+            (guild_id, channel_id),
+        )
+        await db.commit()
+
+
+async def remove_lockdown_channel(guild_id: str, channel_id: str):
+    async with aiosqlite.connect(DB_FILE) as db:
+        await db.execute(
+            "DELETE FROM lockdown_channels WHERE guild_id = ? AND channel_id = ?",
+            (guild_id, channel_id),
+        )
+        await db.commit()
+
+
+async def clear_lockdown_channels(guild_id: str):
+    async with aiosqlite.connect(DB_FILE) as db:
+        await db.execute("DELETE FROM lockdown_channels WHERE guild_id = ?", (guild_id,))
+        await db.commit()
+
+
+async def record_lockdown(guild_id: str, channel_id: str, prev_send, locked_by: str):
+    async with aiosqlite.connect(DB_FILE) as db:
+        await db.execute(
+            "INSERT OR REPLACE INTO active_lockdowns "
+            "(guild_id, channel_id, prev_send, locked_by, locked_at) VALUES (?, ?, ?, ?, ?)",
+            (guild_id, channel_id, prev_send, locked_by,
+             datetime.datetime.now(datetime.timezone.utc).isoformat()),
+        )
+        await db.commit()
+
+
+async def get_active_lockdown(guild_id: str, channel_id: str):
+    async with aiosqlite.connect(DB_FILE) as db:
+        async with db.execute(
+            "SELECT prev_send, locked_by, locked_at FROM active_lockdowns "
+            "WHERE guild_id = ? AND channel_id = ?",
+            (guild_id, channel_id),
+        ) as cursor:
+            return await cursor.fetchone()
+
+
+async def clear_active_lockdown(guild_id: str, channel_id: str):
+    async with aiosqlite.connect(DB_FILE) as db:
+        await db.execute(
+            "DELETE FROM active_lockdowns WHERE guild_id = ? AND channel_id = ?",
+            (guild_id, channel_id),
+        )
+        await db.commit()
+
+
+async def get_all_active_lockdowns(guild_id: str) -> list[str]:
+    """All channel IDs currently under an active lockdown in this guild."""
+    async with aiosqlite.connect(DB_FILE) as db:
+        async with db.execute(
+            "SELECT channel_id FROM active_lockdowns WHERE guild_id = ?",
+            (guild_id,),
+        ) as cursor:
+            return [row[0] for row in await cursor.fetchall()]
+
+
+# --- Stale reference cleanup ---
+# Channel/role columns in guild_settings that get nulled out when the target is gone
+_SETTINGS_REFS = {
+    "join_channel", "leave_channel", "log_channel", "ticket_panel_channel",
+    "transcripts_channel", "verify_channel", "ticket_category",
+}
+_SETTINGS_ROLE_REFS = {"ticket_support_role", "verified_role"}
+
+
+async def cleanup_stale_entries(bot) -> dict:
+    """Remove DB rows/refs pointing at channels, roles or guilds that no longer exist.
+
+    Runs on startup and periodically. Returns {table: rows_removed} for reporting.
+    """
+    removed = {}
+
+    def bump(table, n):
+        if n:
+            removed[table] = removed.get(table, 0) + n
+
+    async with aiosqlite.connect(DB_FILE) as db:
+        db.row_factory = aiosqlite.Row
+
+        # --- Tables keyed by channel_id ---
+        for table in ("voice_temps", "active_lockdowns"):
+            async with db.execute(f"SELECT channel_id, guild_id FROM {table}") as cur:
+                rows = await cur.fetchall()
+            for row in rows:
+                guild = bot.get_guild(int(row["guild_id"]))
+                if guild is None or guild.get_channel(int(row["channel_id"])) is None:
+                    await db.execute(f"DELETE FROM {table} WHERE channel_id = ?",
+                                     (row["channel_id"],))
+                    bump(table, 1)
+
+        # --- Tables keyed by (guild_id, channel_id) ---
+        for table in ("voice_hubs", "lockdown_channels"):
+            async with db.execute(f"SELECT guild_id, channel_id FROM {table}") as cur:
+                rows = await cur.fetchall()
+            for row in rows:
+                guild = bot.get_guild(int(row["guild_id"]))
+                if guild is None or guild.get_channel(int(row["channel_id"])) is None:
+                    await db.execute(
+                        f"DELETE FROM {table} WHERE guild_id = ? AND channel_id = ?",
+                        (row["guild_id"], row["channel_id"]))
+                    bump(table, 1)
+
+        # --- Tickets whose channel is gone ---
+        async with db.execute("SELECT channel_id, guild_id FROM tickets") as cur:
+            rows = await cur.fetchall()
+        for row in rows:
+            guild = bot.get_guild(int(row["guild_id"]))
+            if guild is None or guild.get_channel(int(row["channel_id"])) is None:
+                await db.execute("DELETE FROM tickets WHERE channel_id = ?",
+                                 (row["channel_id"],))
+                bump("tickets", 1)
+
+        # --- guild_settings pointing at deleted channels/roles/categories ---
+        async with db.execute("SELECT * FROM guild_settings") as cur:
+            rows = await cur.fetchall()
+        for row in rows:
+            guild = bot.get_guild(int(row["guild_id"]))
+            if guild is None:
+                continue  # bot was removed from the guild; leave the row
+            for column in _SETTINGS_REFS:
+                value = row[column]
+                if value and guild.get_channel(value) is None:
+                    await db.execute(
+                        f"UPDATE guild_settings SET {column} = NULL "
+                        f"WHERE guild_id = ?", (row["guild_id"],))
+                    bump("guild_settings", 1)
+            for column in _SETTINGS_ROLE_REFS:
+                value = row[column]
+                if value and guild.get_role(value) is None:
+                    await db.execute(
+                        f"UPDATE guild_settings SET {column} = NULL "
+                        f"WHERE guild_id = ?", (row["guild_id"],))
+                    bump("guild_settings", 1)
+
+        await db.commit()
+    return removed
+
+
+# --- Verification tracking ---
+async def record_verification_attempt(guild_id: str, user_id: str, success: bool):
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    result = "success" if success else "failure"
+    async with aiosqlite.connect(DB_FILE) as db:
+        await db.execute(
+            "INSERT INTO verification_attempts (guild_id, user_id, result, attempts, last_at) "
+            "VALUES (?, ?, ?, 1, ?) "
+            "ON CONFLICT(guild_id, user_id, result) DO UPDATE SET "
+            "attempts = attempts + 1, last_at = excluded.last_at",
+            (guild_id, user_id, result, now),
+        )
+        await db.commit()
+
+
+async def get_verification_stats(guild_id: str):
+    async with aiosqlite.connect(DB_FILE) as db:
+        async with db.execute(
+            "SELECT result, SUM(attempts) FROM verification_attempts "
+            "WHERE guild_id = ? GROUP BY result",
+            (guild_id,),
+        ) as cursor:
+            rows = await cursor.fetchall()
+    stats = {"success": 0, "failure": 0}
+    for result, count in rows:
+        if result in stats:
+            stats[result] = count
+    return stats
