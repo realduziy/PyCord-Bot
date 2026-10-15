@@ -3,15 +3,11 @@
 A simple multipurpose Discord bot coded in Python using [discord.py](https://github.com/Rapptz/discord.py).
 
 > [!NOTE]
-> This bot is in active development. Most of the code was put together with the help of AI, StackOverflow, and YouTube tutorials!
+> This bot is in active development. Most of the code was put together with the help of AI, Stack Overflow, and YouTube tutorials!
 
 ---
 
-## 🚀 About & Credits
-
-* **Developer:** Duziy
-* **Discord:** `@duziy`
-* **Contributions:** Feel free to slide into my DMs with suggestions or submit a pull request on GitHub, and I'll take a look at it when I get the chance.
+* **Contributions:** Feel free to DM me with suggestions or submit a pull request on GitHub, and I'll take a look at it when I get the chance.
 
 ---
 
