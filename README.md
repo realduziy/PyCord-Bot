@@ -38,6 +38,7 @@ A multipurpose Discord bot coded in Python using [discord.py](https://github.com
 | 🛡️ **Auto-Moderation** | Configurable filters for blocked words (with comma-separated batch add/remove), Discord invites, external links, excessive caps, mass mentions, and message spam — with an optional staff permission bypass. |
 | 🎟️ **Verification System** | Captcha or one-click verification with full success/failure logging, statistics, and manual verification for staff. |
 | 🔒 **Lockdown System** | Lock channels instantly — pick defaults with `/lockdown defaults`, or fall back to the current channel. Previous permission states are restored on unlock. |
+| 🎙️ **Temporary Voice Channels** | VoiceMaster-style hubs: join a hub channel to spawn your own temp voice channel, ownership transfers when you leave, and empty channels are deleted automatically. |
 | 🔨 **Moderation Tools** | Mute, kick, ban, unban, unmute, message purge, and a persistent mod-case history. |
 
 ---
@@ -128,6 +129,14 @@ Once the bot is in your server, configure it with slash commands:
 | `/ticketstats` | Ticket statistics |
 | `/claimstats` | Claim leaderboard |
 
+### Voice Channels
+| Command | Description |
+| --- | --- |
+| `/voicehub` | Create a hub — joining it spawns a personal temp channel |
+| `/voicehubremove` | Remove hub status from a channel |
+| `/voicehubs` | List all hubs |
+| `/voicecleanup` | Delete all empty temp channels |
+
 ### Logging
 | Command | Description |
 | --- | --- |
@@ -175,6 +184,7 @@ If you find a bug, let me know via Discord (`@duziy`) or open an issue on GitHub
 - [x] **Auto-Moderation** — Fully customizable filters with logged events, batch word management, and a toggleable staff bypass.
 - [x] **Verification System** — Tracks and logs successful/failed verifications, with captcha or one-click modes and statistics.
 - [x] **Lockdown Command** — Overhauled: configurable default channels, current-channel fallback, and automatic restoration of previous permissions.
+- [x] **Temporary Voice Channels** — VoiceMaster-style hubs: join to create your own channel, automatic ownership transfer, and deletion when empty.
 - [ ] **Music Integration** — Add support for Spotify and YouTube playback.
 
 ---
