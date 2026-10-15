@@ -1,47 +1,79 @@
-Must use Python 3.13
+Here is the complete raw Markdown block ready to copy and paste directly into your `README.md` file on GitHub:
 
-This bot is being developed by Duziy. If you need help, have any suggestions, or wish to help me, feel free to private message me via Discord @ duziy. Feel free to submit pull request if you have suggestions and i'll take a look at it at some point.
+```markdown
+# PyCord-Bot
 
-NOTE: This bot is still in an early stage of development! At some point, I will use COGS when I have a better understanding of Python. I want this to be as simple as it can be so learning COGS is not on my list of priorities.
+A simple multipurpose Discord bot coded in Python using [discord.py](https://github.com/Rapptz/discord.py).
 
-I don't claim to own any of the code that is used for this bot, as most of it is from ChatGPT, StackOverflow, and Youtube!
+> [!NOTE]
+> This bot is in active development. Most of the code was put together with the help of AI (ChatGPT), StackOverflow, and YouTube tutorials!
 
-What is PyCord-Bot?
+---
 
-PyCord-Bot is a simple multipurpose discord bot coded in Python.
+## 🚀 About & Credits
 
-The main library that is being used is Discord.py. 
+* **Developer:** Duziy
+* **Discord:** `@duziy`
+* **Contributions:** Feel free to slide into my DMs with suggestions or submit a pull request on GitHub, and I'll take a look at it when I get the chance.
 
-You can view it at https://github.com/Rapptz/discord.py. 
+---
 
-You will need to install these packages. You can install them with the following command, as long as you have requerments.txt in the same folder. 
+## ⚡ Key Features
 
-pip install -r requirements.txt --upgrade
+* **Modular Cog Architecture:** The codebase is fully organized into Cogs for cleaner code and easier maintenance.
+* **Interactive Setup Command:** Includes an easy-to-use setup command to quickly configure the bot for your server.
+* **Ticket System:** Built-in support for ticketing workflows with ongoing feature improvements.
 
-If this command does not work run this:
+---
 
-python -m pip install -r requirements.txt --upgrade (this is a alternative to the first command)
+## 📦 Installation & Setup
 
-then
+Make sure you have **Python 3.15** installed on your system. 
 
-python -m pip install --upgrade pip (this command makes sure that pip is updated to the newest version)
+1. Place your `requirements.txt` file in the project folder.
+2. Open your terminal in that folder and run:
+   ```bash
+   pip install -r requirements.txt --upgrade
 
-if your still having problems try uninstalling python and download the newest version via this link https://www.python.org/downloads/
+```
 
-If you find a bug, feel free to let me know via Discord or via an issue request, but do note that I may not fix it for some time as I don't update this often.
+### Troubleshooting Installation
 
-To-do list:
+* **If the first command fails, try:**
+```bash
+python -m pip install -r requirements.txt --upgrade
 
-Change everything over to cogs to clean it up more. (This will be at a later date when I have better understanding of python.)
+```
 
-Logging System (Basic version is done) (For the Log Auto-Moderation stuff and for the Ticket system, you can change what channel it puts the Transcripts in, and for the Verification system, it logs when someone Verifys successfully or not.)
 
-Auto-Moderation (Be able to edit what you want to be logged)
+* **Make sure pip is fully updated:**
+```bash
+python -m pip install --upgrade pip
 
-Ticket System (Finished, but work on it more when I feel like it.)
+```
 
-Verification System
 
-Make a better lockdown command and make it so you can select what channels you want the lockdown command to lockdown by default. If there is none, it will just be the channel that you sent the command in.
+* **Still having issues?** Try completely uninstalling Python and grabbing the newest version directly from the [Python Downloads Page](https://www.python.org/downloads/).
 
-Add music to Spotify and Youtube.
+---
+
+## 🐛 Bug Reports
+
+If you find a bug, let me know via Discord (`@duziy`) or open an issue on GitHub. Please note that updates aren't frequent, so a fix might take some time to roll out!
+
+---
+
+## 📋 To-Do List
+
+* [x] **Refactor to Cogs:** Converted the entire codebase over to Cogs for cleaner structure and organization.
+* [x] **Setup Command:** Added a quick setup command for server configuration.
+* [x] **Ticket System Updates:** Made progress expanding and refining the ticket system.
+* [ ] **Logging System:** Basic version is done. Expand it for Log Auto-Moderation, custom Ticket transcript channels, and Verification logs.
+* [ ] **Auto-Moderation:** Make logged events fully customizable.
+* [ ] **Verification System:** Track and log successful/failed verifications.
+* [ ] **Lockdown Command:** Overhaul it so you can select default channels to lockdown (defaults to the current channel if none are selected).
+* [ ] **Music Integration:** Add support for Spotify and YouTube playback.
+
+```
+
+```
