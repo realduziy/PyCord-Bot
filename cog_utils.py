@@ -27,6 +27,14 @@ def get_session() -> aiohttp.ClientSession:
     return _session
 
 
+async def close_session():
+    """Close the shared HTTP session (called on cog unload/shutdown)."""
+    global _session
+    if _session is not None and not _session.closed:
+        await _session.close()
+    _session = None
+
+
 async def fetch_json(url, headers=None):
     try:
         request_headers = {'Accept': 'application/json'}
@@ -60,8 +68,13 @@ async def set_guild_setting(guild_id: str, column: str, value) -> None:
     if column not in COLUMNS:
         raise ValueError(f"Unknown setting column: {column}")
     async with aiosqlite.connect(DB_FILE) as db:
+        # UPSERT, not a bare UPDATE: a guild with no row yet (e.g. invited
+        # while the bot was crashed/offline) would otherwise have the
+        # setting silently swallowed by a zero-row UPDATE.
         await db.execute(
-            f"UPDATE guild_settings SET {column} = ? WHERE guild_id = ?", (value, guild_id)
+            f"INSERT INTO guild_settings (guild_id, {column}) VALUES (?, ?) "
+            f"ON CONFLICT(guild_id) DO UPDATE SET {column} = excluded.{column}",
+            (guild_id, value),
         )
         await db.commit()
 
@@ -540,10 +553,45 @@ _SETTINGS_REFS = {
 _SETTINGS_ROLE_REFS = {"ticket_support_role", "verified_role"}
 
 
+async def _channel_exists(guild: discord.Guild, channel_id: int) -> bool | None:
+    """Cache-first existence check with API confirmation.
+
+    Returns True (exists), False (confirmed deleted), or None (couldn't
+    verify — e.g. HTTP error — so KEEP the entry to be safe).
+    """
+    if guild.get_channel(channel_id) is not None:
+        return True
+    try:
+        await guild.fetch_channel(channel_id)
+        return True
+    except discord.NotFound:
+        return False
+    except (discord.HTTPException, discord.Forbidden):
+        return None
+
+
+async def _role_exists(guild: discord.Guild, role_id: int) -> bool | None:
+    """Same contract as _channel_exists, for roles."""
+    if guild.get_role(role_id) is not None:
+        return True
+    try:
+        await guild.fetch_role(role_id)
+        return True
+    except discord.NotFound:
+        return False
+    except (discord.HTTPException, discord.Forbidden):
+        return None
+
+
 async def cleanup_stale_entries(bot) -> dict:
     """Remove DB rows/refs pointing at channels, roles or guilds that no longer exist.
 
-    Runs on startup and periodically. Returns {table: rows_removed} for reporting.
+    IMPORTANT: an entry is only removed when its absence is CONFIRMED via the
+    Discord API. Cache misses (startup races, gateway hiccups) must never
+    delete live config — that wiped voice hubs, ticket rows and channel
+    settings in earlier versions. Anything unverifiable is kept.
+
+    Runs periodically. Returns {table: rows_removed} for reporting.
     """
     removed = {}
 
@@ -560,7 +608,10 @@ async def cleanup_stale_entries(bot) -> dict:
                 rows = await cur.fetchall()
             for row in rows:
                 guild = bot.get_guild(int(row["guild_id"]))
-                if guild is None or guild.get_channel(int(row["channel_id"])) is None:
+                if guild is None:
+                    continue  # can't verify right now — keep the row
+                exists = await _channel_exists(guild, int(row["channel_id"]))
+                if exists is False:  # confirmed deleted, not just uncached
                     await db.execute(f"DELETE FROM {table} WHERE channel_id = ?",
                                      (row["channel_id"],))
                     bump(table, 1)
@@ -571,18 +622,24 @@ async def cleanup_stale_entries(bot) -> dict:
                 rows = await cur.fetchall()
             for row in rows:
                 guild = bot.get_guild(int(row["guild_id"]))
-                if guild is None or guild.get_channel(int(row["channel_id"])) is None:
+                if guild is None:
+                    continue
+                exists = await _channel_exists(guild, int(row["channel_id"]))
+                if exists is False:
                     await db.execute(
                         f"DELETE FROM {table} WHERE guild_id = ? AND channel_id = ?",
                         (row["guild_id"], row["channel_id"]))
                     bump(table, 1)
 
-        # --- Tickets whose channel is gone ---
+        # --- Tickets whose channel is confirmed gone ---
         async with db.execute("SELECT channel_id, guild_id FROM tickets") as cur:
             rows = await cur.fetchall()
         for row in rows:
             guild = bot.get_guild(int(row["guild_id"]))
-            if guild is None or guild.get_channel(int(row["channel_id"])) is None:
+            if guild is None:
+                continue
+            exists = await _channel_exists(guild, int(row["channel_id"]))
+            if exists is False:
                 await db.execute("DELETE FROM tickets WHERE channel_id = ?",
                                  (row["channel_id"],))
                 bump("tickets", 1)
@@ -596,14 +653,20 @@ async def cleanup_stale_entries(bot) -> dict:
                 continue  # bot was removed from the guild; leave the row
             for column in _SETTINGS_REFS:
                 value = row[column]
-                if value and guild.get_channel(value) is None:
+                if not value:
+                    continue
+                exists = await _channel_exists(guild, int(value))
+                if exists is False:
                     await db.execute(
                         f"UPDATE guild_settings SET {column} = NULL "
                         f"WHERE guild_id = ?", (row["guild_id"],))
                     bump("guild_settings", 1)
             for column in _SETTINGS_ROLE_REFS:
                 value = row[column]
-                if value and guild.get_role(value) is None:
+                if not value:
+                    continue
+                exists = await _role_exists(guild, int(value))
+                if exists is False:
                     await db.execute(
                         f"UPDATE guild_settings SET {column} = NULL "
                         f"WHERE guild_id = ?", (row["guild_id"],))

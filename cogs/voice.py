@@ -1,4 +1,5 @@
 import datetime
+from typing import Optional
 
 import aiosqlite
 import discord
@@ -7,6 +8,7 @@ from discord.ext import commands
 from discord.ui import Button, Modal, TextInput, View
 
 from cog_utils import DB_FILE, log_event
+from ui_common import base_embed, parse_snowflake
 
 DEFAULT_TEMPLATE = "{user}'s Lounge"
 DEFAULT_HUB_NAME = "\u2795 Join to Create"
@@ -109,15 +111,14 @@ async def _all_temps(guild_id: str) -> list:
 def _panel_embed(vc: discord.VoiceChannel, owner_id: str) -> discord.Embed:
     everyone = vc.overwrites_for(vc.guild.default_role)
     locked = everyone.connect is False
-    embed = discord.Embed(title=f"\U0001f50a {vc.name}", color=0x57f287)
+    embed = base_embed(f"\U0001f50a {vc.name}", "success")
+    embed.set_footer(text="Only the channel owner (or staff) can use these controls.")
     embed.add_field(name="Owner", value=f"<@{owner_id}>", inline=True)
     embed.add_field(name="Status", value="\U0001f512 Locked" if locked else "\U0001f513 Open",
                     inline=True)
     embed.add_field(name="User Limit",
                     value=str(vc.user_limit) if vc.user_limit else "No limit", inline=True)
     embed.add_field(name="Members", value=len(vc.members), inline=True)
-    embed.set_footer(text="Only the channel owner (or staff) can use these controls.")
-    embed.timestamp = datetime.datetime.now(datetime.timezone.utc)
     return embed
 
 
@@ -174,9 +175,7 @@ class InviteModal(Modal):
         vc, temp = await self.cog._panel_context(interaction, respond=True)
         if vc is None:
             return
-        import re
-        match = re.match(r"^(?:<@!?(\d+)>|(\d+))$", self.user.value.strip())
-        raw_id = int(match.group(1) or match.group(2)) if match else None
+        raw_id = parse_snowflake(self.user.value)
         target = interaction.guild.get_member(raw_id) if raw_id else None
         if target is None:
             await interaction.response.send_message(
@@ -205,9 +204,7 @@ class KickModal(Modal):
         vc, temp = await self.cog._panel_context(interaction, respond=True)
         if vc is None:
             return
-        import re
-        match = re.match(r"^(?:<@!?(\d+)>|(\d+))$", self.user.value.strip())
-        raw_id = int(match.group(1) or match.group(2)) if match else None
+        raw_id = parse_snowflake(self.user.value)
         target = interaction.guild.get_member(raw_id) if raw_id else None
         if target is None or target not in vc.members:
             await interaction.response.send_message(
@@ -292,13 +289,23 @@ class Voice(commands.Cog):
         self.bot = bot
 
     async def cog_load(self):
-        """Clean up temp channels that went stale while the bot was offline."""
+        """Clean up temp channels that went stale while the bot was offline.
+
+        Existence is confirmed via the API (never the cache alone), and a
+        live channel is only deleted when the member cache is complete
+        (guild.chunked) — a cache miss must never wipe a busy channel.
+        """
         for guild in self.bot.guilds:
             for temp in await _all_temps(str(guild.id)):
-                channel = guild.get_channel(int(temp["channel_id"]))
-                if channel is None:
-                    await _remove_temp(temp["channel_id"])
-                elif not channel.members:
+                channel_id = int(temp["channel_id"])
+                try:
+                    channel = await guild.fetch_channel(channel_id)
+                except discord.NotFound:
+                    await _remove_temp(temp["channel_id"])  # confirmed gone
+                    continue
+                except (discord.Forbidden, discord.HTTPException):
+                    continue  # can't verify right now — leave it alone
+                if not channel.members and getattr(guild, "chunked", False):
                     try:
                         await channel.delete(reason="Cleaning up empty temp voice channel")
                     except (discord.Forbidden, discord.HTTPException):
@@ -386,11 +393,10 @@ class Voice(commands.Cog):
             await _remove_temp(str(temp.id))
             return None
 
-        embed = discord.Embed(title="\U0001f50a Temp Voice Channel Created", color=0x57f287)
+        embed = base_embed("\U0001f50a Temp Voice Channel Created", "success")
         embed.add_field(name="Channel", value=temp.name, inline=True)
         embed.add_field(name="Owner", value=f"{member} (`{member.id}`)", inline=True)
         embed.add_field(name="Hub", value=hub.name, inline=True)
-        embed.timestamp = datetime.datetime.now(datetime.timezone.utc)
         await log_event(guild, "voice", embed)
         return temp
 
@@ -450,40 +456,24 @@ class Voice(commands.Cog):
     # --- Commands ---
     @app_commands.command(name="voicehub", description="Create a voice hub, or turn an existing channel into one.")
     @app_commands.describe(
-        channel="An existing voice channel (mention or ID) to turn into a hub — leave empty to create a new one",
+        channel="An existing voice channel to turn into a hub — pick one, or leave empty to create a new one",
         name="Name for the new hub channel (only used when creating one)")
     @app_commands.checks.has_permissions(manage_channels=True)
     @app_commands.checks.bot_has_permissions(manage_channels=True)
     async def voice_hub_create(self, interaction: discord.Interaction,
-                               channel: str = None, name: str = None):
+                               channel: Optional[discord.VoiceChannel] = None,
+                               name: Optional[str] = None):
         guild_id = str(interaction.guild.id)
 
-        if channel:
-            raw_id = None
-            if channel.strip().isdigit():
-                raw_id = int(channel.strip())
-            else:
-                import re
-                match = re.match(r"^<#(\d+)>$", channel.strip())
-                if match:
-                    raw_id = int(match.group(1))
-            existing = interaction.guild.get_channel(raw_id) if raw_id else None
-            if existing is None:
-                await interaction.response.send_message(
-                    "Couldn't find that channel — mention it or paste its ID.", ephemeral=True)
-                return
-            if not isinstance(existing, discord.VoiceChannel):
-                await interaction.response.send_message(
-                    f"{existing.mention} is not a voice channel.", ephemeral=True)
-                return
-            row = await _get_hub(str(existing.id))
+        if channel is not None:
+            row = await _get_hub(str(channel.id))
             if row:
                 await interaction.response.send_message(
-                    f"{existing.mention} is already a hub.", ephemeral=True)
+                    f"\u2705 {channel.mention} is already a hub.", ephemeral=True)
                 return
-            await _add_hub(guild_id, str(existing.id), DEFAULT_TEMPLATE)
+            await _add_hub(guild_id, str(channel.id), DEFAULT_TEMPLATE)
             await interaction.response.send_message(
-                f"\u2705 {existing.mention} is now a hub — anyone who joins gets their own "
+                f"\u2705 {channel.mention} is now a hub — anyone who joins gets their own "
                 f"temp channel with a control panel in its chat.", ephemeral=True)
             return
 

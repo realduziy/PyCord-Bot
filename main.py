@@ -76,8 +76,15 @@ class DuziyBot(commands.Bot):
         cogs_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cogs")
         for filename in sorted(os.listdir(cogs_dir)):
             if filename.endswith(".py") and not filename.startswith("_"):
-                await self.load_extension(f"cogs.{filename[:-3]}")
-                log.info("Loaded extension: cogs.%s", filename[:-3])
+                ext = f"cogs.{filename[:-3]}"
+                try:
+                    await self.load_extension(ext)
+                except commands.NoEntryPointError:
+                    # Helper module imported by other cogs, not an extension —
+                    # never let a stray file kill startup
+                    log.info("Skipping helper module: %s", ext)
+                    continue
+                log.info("Loaded extension: %s", ext)
 
     async def handle_app_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
         """Global slash-command error handler with friendly, specific messages."""
@@ -90,7 +97,8 @@ class DuziyBot(commands.Bot):
         elif isinstance(error, app_commands.CheckFailure):
             msg = "You can't use this command here."
         else:
-            log.error("Unhandled app command error: %s", error, exc_info=error)
+            log.error("Unhandled app command error: %s", error,
+                      exc_info=(type(error), error, error.__traceback__))
             msg = "Something went wrong while running that command. The error has been logged."
 
         try:
@@ -108,7 +116,13 @@ class DuziyBot(commands.Bot):
 
 async def main():
     async with DuziyBot() as bot:
-        await bot.start(TOKEN)
+        try:
+            await bot.start(TOKEN)
+        finally:
+            # Close the shared HTTP session on shutdown (idempotent — cog_unload
+            # may have closed it already)
+            from cog_utils import close_session
+            await close_session()
 
 
 if __name__ == "__main__":

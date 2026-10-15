@@ -1,10 +1,9 @@
-import datetime
 import logging
 
 import discord
 from discord import app_commands
 from discord.ext import commands
-from discord.ui import Select, View
+from discord.ui import Select
 
 from cog_utils import (
     LOG_EVENTS,
@@ -14,20 +13,24 @@ from cog_utils import (
     log_event,
     set_log_event,
 )
+from ui_common import EMOJI, PanelView, base_embed
+from cogs._hub import BackToHubButton
 
 # Console trace for message events — makes it obvious whether the bot is
 # receiving deletes/edits at all (check the console when testing logging).
 audit_log = logging.getLogger("duziy-bot.audit")
 
+_EVENT_EMOJI = {
+    "mod": "\U0001f6e1\ufe0f", "automod": "\U0001f6e1\ufe0f", "tickets": "\U0001f3ab",
+    "verification": "\U0001f39f\ufe0f", "members": "\U0001f465", "channels": "\U0001f4e1",
+    "roles": "\U0001f3ad", "messages": "\u270f\ufe0f", "server": "\U0001f3db\ufe0f",
+    "lockdown": "\U0001f512", "voice": "\U0001f50a",
+}
 
-def _now():
-    return datetime.datetime.now(datetime.timezone.utc)
 
-
-def _base(title: str, color: int) -> discord.Embed:
-    embed = discord.Embed(title=title, color=color)
-    embed.timestamp = _now()
-    return embed
+def _base(title: str, color: str) -> discord.Embed:
+    # Single embed factory like every other cog — color names, not raw ints
+    return base_embed(title, color)
 
 
 def _content(value, limit=1024):
@@ -48,45 +51,51 @@ def _category_name(channel) -> str:
 
 
 async def _status_embed(guild_id: str) -> discord.Embed:
-    embed = discord.Embed(title="\U0001f4cb Log Event Status", color=0x5865f2)
+    embed = base_embed(f"{EMOJI['logs']} Log Event Status", "primary")
     lines = []
     for key, name in LOG_EVENTS.items():
-        mark = "\u2705" if await is_log_event_enabled(guild_id, key) else "\u274c"
+        mark = EMOJI["ok"] if await is_log_event_enabled(guild_id, key) else EMOJI["no"]
         lines.append(f"{mark} {name}")
     embed.description = "\n".join(lines)
-    embed.set_footer(text="Pick an event in the dropdown below to toggle it.")
-    embed.timestamp = _now()
     return embed
 
 
-class LogPanelView(View):
-    """Interactive panel: pick an event from the dropdown to toggle it on/off."""
+class LogPanelView(PanelView):
+    """Interactive panel: pick an event from the dropdown to toggle it on/off.
+
+    Same layout/behavior as the auto-mod and verification panels.
+    """
 
     def __init__(self):
-        super().__init__(timeout=300)
+        super().__init__()
         options = [
-            discord.SelectOption(label=name[:100], value=key, emoji="\U0001f4cb",
-                                 description="Toggle this log event")
+            discord.SelectOption(label=name[:100], value=key,
+                                 emoji=_EVENT_EMOJI.get(key, EMOJI["logs"]))
             for key, name in LOG_EVENTS.items()
         ][:25]
-        self.select = Select(placeholder="Pick an event to toggle...", min_values=1,
-                             max_values=1, options=options, custom_id="log_toggle_select")
-        self.select.callback = self._toggle
-        self.add_item(self.select)
+        select = Select(placeholder="Pick an event to toggle\u2026", min_values=1,
+                        max_values=1, options=options, custom_id="log_toggle_select")
+        select.callback = self._toggle
+        self.event_select = select
+        self.add_item(select)
+        self.add_item(BackToHubButton(row=1))
 
     async def _toggle(self, interaction: discord.Interaction):
-        if not self.select.values:
+        if not await self.guard(interaction):
+            return
+        if not self.event_select.values:
             await interaction.response.send_message("Nothing selected.", ephemeral=True)
             return
-        chosen = self.select.values[0]
+        chosen = self.event_select.values[0]
         guild_id = str(interaction.guild.id)
         enabled = await is_log_event_enabled(guild_id, chosen)
         await set_log_event(guild_id, chosen, not enabled)
-        state = "\u2705 enabled" if not enabled else "\u274c disabled"
-        await interaction.response.edit_message(
-            embed=await _status_embed(guild_id), view=self)
+        state = "enabled" if not enabled else "disabled"
+        await interaction.response.edit_message(embed=await _status_embed(guild_id),
+                                                view=self)
         await interaction.followup.send(
-            f"{state} **{LOG_EVENTS[chosen]}** logging.", ephemeral=True)
+            f"{EMOJI['ok'] if not enabled else EMOJI['no']} "
+            f"**{LOG_EVENTS[chosen]}** logging {state}.", ephemeral=True)
 
 
 class Logging(commands.Cog):
@@ -100,13 +109,6 @@ class Logging(commands.Cog):
         return cfg.log_channel == channel.id
 
     # --- Commands ---
-    @app_commands.command(name="logsettings", description="Open the interactive log settings panel.")
-    @app_commands.checks.has_permissions(manage_guild=True)
-    async def logsettings(self, interaction: discord.Interaction):
-        await interaction.response.send_message(
-            embed=await _status_embed(str(interaction.guild.id)),
-            view=LogPanelView(), ephemeral=True)
-
     @app_commands.command(name="logstatus", description="Show which log events are currently enabled.")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def logstatus(self, interaction: discord.Interaction):
@@ -134,7 +136,7 @@ class Logging(commands.Cog):
                 return  # auto-mod already logged this deletion
             if not message.content and not message.attachments:
                 return
-            embed = _base("\U0001f5d1\ufe0f Message Deleted", 0xed4245)
+            embed = _base("\U0001f5d1\ufe0f Message Deleted", "danger")
             embed.add_field(name="Author", value=f"{message.author} (`{message.author.id}`)",
                             inline=True)
             embed.add_field(name="Channel", value=channel.mention, inline=True)
@@ -147,7 +149,7 @@ class Logging(commands.Cog):
             if consume_automod_deleted(payload.message_id):
                 return
             # Discord doesn't send content for old messages — log what we can
-            embed = _base("\U0001f5d1\ufe0f Message Deleted", 0xed4245)
+            embed = _base("\U0001f5d1\ufe0f Message Deleted", "danger")
             embed.add_field(name="Channel", value=channel.mention, inline=True)
             embed.add_field(name="Author", value="Unknown (not in cache)", inline=True)
             embed.add_field(name="Content",
@@ -168,7 +170,7 @@ class Logging(commands.Cog):
         audit_log.info("PURGE captured: #%s | count=%s", channel, len(payload.message_ids))
         user_messages = [m for m in payload.cached_messages
                          if not m.author.bot and not consume_automod_deleted(m.id)]
-        embed = _base("\U0001f9f9 Messages Purged", 0xed4245)
+        embed = _base("\U0001f9f9 Messages Purged", "danger")
         embed.add_field(name="Channel", value=channel.mention, inline=True)
         embed.add_field(name="Count", value=len(payload.message_ids), inline=True)
         if user_messages:
@@ -203,7 +205,7 @@ class Logging(commands.Cog):
         audit_log.info("EDIT captured: #%s | cached_before=%s", channel, before_message is not None)
         author_value = (f"<@{author['id']}> (`{author['id']}`)"
                         if author.get("id") else "Unknown")
-        embed = _base("\u270f\ufe0f Message Edited", 0xfee75c)
+        embed = _base("\u270f\ufe0f Message Edited", "warning")
         embed.add_field(name="Author", value=author_value, inline=True)
         embed.add_field(name="Channel", value=channel.mention, inline=True)
         embed.add_field(name="Jump",
@@ -218,7 +220,7 @@ class Logging(commands.Cog):
     # --- Channels ---
     @commands.Cog.listener()
     async def on_guild_channel_create(self, channel: discord.abc.GuildChannel):
-        embed = _base("\U0001f7e2 Channel Created", 0x57f287)
+        embed = _base("\U0001f7e2 Channel Created", "success")
         embed.add_field(name="Channel", value=f"#{channel.name}", inline=True)
         embed.add_field(name="Type", value=_channel_label(channel), inline=True)
         embed.add_field(name="Category", value=_category_name(channel), inline=True)
@@ -226,7 +228,7 @@ class Logging(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_channel_delete(self, channel: discord.abc.GuildChannel):
-        embed = _base("\U0001f534 Channel Deleted", 0xed4245)
+        embed = _base("\U0001f534 Channel Deleted", "danger")
         embed.add_field(name="Channel", value=f"#{channel.name}", inline=True)
         embed.add_field(name="Type", value=_channel_label(channel), inline=True)
         embed.add_field(name="Category", value=_category_name(channel), inline=True)
@@ -245,7 +247,7 @@ class Logging(commands.Cog):
                 changes.append("Topic changed")
         if not changes:
             return  # permission-only edits etc. (too noisy to diff here)
-        embed = _base("\U0001f7e1 Channel Updated", 0xfee75c)
+        embed = _base("\U0001f7e1 Channel Updated", "warning")
         embed.add_field(name="Channel", value=f"#{after.name}", inline=False)
         embed.add_field(name="Changes", value="\n".join(changes)[:1024], inline=False)
         await log_event(after.guild, "channels", embed)
@@ -253,7 +255,7 @@ class Logging(commands.Cog):
     # --- Roles ---
     @commands.Cog.listener()
     async def on_guild_role_create(self, role: discord.Role):
-        embed = _base("\U0001f7e2 Role Created", 0x57f287)
+        embed = _base("\U0001f7e2 Role Created", "success")
         embed.add_field(name="Role", value=role.mention, inline=True)
         embed.add_field(name="Color", value=str(role.color) if role.color else "Default", inline=True)
         embed.add_field(name="Mentionable", value="Yes" if role.mentionable else "No", inline=True)
@@ -261,7 +263,7 @@ class Logging(commands.Cog):
 
     @commands.Cog.listener()
     async def on_guild_role_delete(self, role: discord.Role):
-        embed = _base("\U0001f534 Role Deleted", 0xed4245)
+        embed = _base("\U0001f534 Role Deleted", "danger")
         embed.add_field(name="Role", value=role.name, inline=True)
         embed.add_field(name="Had Members", value=str(len(role.members)), inline=True)
         embed.add_field(name="Color", value=str(role.color) if role.color else "Default", inline=True)
@@ -280,7 +282,7 @@ class Logging(commands.Cog):
             changes.append(f"Mentionable: {before.mentionable} \u2192 {after.mentionable}")
         if not changes:
             return  # permission-only changes (too noisy to fully diff)
-        embed = _base("\U0001f7e1 Role Updated", 0xfee75c)
+        embed = _base("\U0001f7e1 Role Updated", "warning")
         embed.add_field(name="Role", value=after.mention, inline=False)
         embed.add_field(name="Changes", value="\n".join(changes)[:1024], inline=False)
         await log_event(after.guild, "roles", embed)
@@ -288,13 +290,13 @@ class Logging(commands.Cog):
     # --- Punishments (catches manual bans/timeouts done outside the bot) ---
     @commands.Cog.listener()
     async def on_member_ban(self, guild: discord.Guild, user: discord.User):
-        embed = _base("\U0001f528 Member Banned", 0xed4245)
+        embed = _base("\U0001f528 Member Banned", "danger")
         embed.add_field(name="User", value=f"{user} (`{user.id}`)", inline=True)
         await log_event(guild, "mod", embed)
 
     @commands.Cog.listener()
     async def on_member_unban(self, guild: discord.Guild, user: discord.User):
-        embed = _base("\U0001f513 Member Unbanned", 0x57f287)
+        embed = _base("\U0001f513 Member Unbanned", "success")
         embed.add_field(name="User", value=f"{user} (`{user.id}`)", inline=True)
         await log_event(guild, "mod", embed)
 
@@ -304,17 +306,17 @@ class Logging(commands.Cog):
         if before.timed_out_until != after.timed_out_until:
             if after.timed_out_until:
                 until = after.timed_out_until.strftime("%Y-%m-%d %H:%M UTC")
-                embed = _base("\u23f0 Member Timed Out", 0xed4245)
+                embed = _base("\u23f0 Member Timed Out", "danger")
                 embed.add_field(name="User", value=f"{after} (`{after.id}`)", inline=True)
                 embed.add_field(name="Until", value=until, inline=True)
                 await log_event(after.guild, "mod", embed)
             else:
-                embed = _base("\U0001f513 Timeout Removed", 0x57f287)
+                embed = _base("\U0001f513 Timeout Removed", "success")
                 embed.add_field(name="User", value=f"{after} (`{after.id}`)", inline=True)
                 await log_event(after.guild, "mod", embed)
         # Nickname changes
         if before.nick != after.nick:
-            embed = _base("\U0001f4dd Nickname Changed", 0xfee75c)
+            embed = _base("\U0001f4dd Nickname Changed", "warning")
             embed.add_field(name="User", value=f"{after} (`{after.id}`)", inline=True)
             embed.add_field(name="Before", value=before.nick or "*none*", inline=True)
             embed.add_field(name="After", value=after.nick or "*none*", inline=True)
@@ -325,7 +327,7 @@ class Logging(commands.Cog):
         added = after_roles - before_roles
         removed = before_roles - after_roles
         if added or removed:
-            embed = _base("\U0001f3ad Roles Changed", 0xfee75c)
+            embed = _base("\U0001f3ad Roles Changed", "warning")
             embed.add_field(name="User", value=f"{after} (`{after.id}`)", inline=True)
             if added:
                 embed.add_field(name="Added",
@@ -338,7 +340,7 @@ class Logging(commands.Cog):
     # --- Invites & server ---
     @commands.Cog.listener()
     async def on_invite_create(self, invite: discord.Invite):
-        embed = _base("\U0001f4e9 Invite Created", 0x57f287)
+        embed = _base("\U0001f4e9 Invite Created", "success")
         embed.add_field(name="Code", value=f"`{invite.code}`", inline=True)
         embed.add_field(name="Channel", value=invite.channel.mention, inline=True)
         embed.add_field(name="Inviter",
@@ -350,7 +352,7 @@ class Logging(commands.Cog):
     async def on_invite_delete(self, invite: discord.Invite):
         if invite.guild is None:
             return
-        embed = _base("\U0001f5d1\ufe0f Invite Deleted", 0xed4245)
+        embed = _base("\U0001f5d1\ufe0f Invite Deleted", "danger")
         embed.add_field(name="Code", value=f"`{invite.code}`", inline=True)
         embed.add_field(name="Channel",
                         value=invite.channel.mention if invite.channel else "Unknown",
@@ -369,7 +371,7 @@ class Logging(commands.Cog):
                            f"\u2192 {after.verification_level}")
         if not changes:
             return
-        embed = _base("\U0001f3db\ufe0f Server Updated", 0xfee75c)
+        embed = _base("\U0001f3db\ufe0f Server Updated", "warning")
         embed.add_field(name="Changes", value="\n".join(changes)[:1024], inline=False)
         await log_event(after, "server", embed)
 

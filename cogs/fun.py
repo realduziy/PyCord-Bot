@@ -9,6 +9,7 @@ from discord.ext import commands
 from discord.ui import Button, View
 
 from cog_utils import fetch_json
+from ui_common import base_embed
 
 
 # --- Safe math evaluator: parses the AST instead of using eval() ---
@@ -98,6 +99,9 @@ class Fun(commands.Cog):
         try:
             result = safe_eval(expression)
             await interaction.response.send_message(f"Result: `{result}`", ephemeral=True)
+        except RecursionError:
+            await interaction.response.send_message(
+                "That expression is nested too deeply.", ephemeral=True)
         except (ValueError, SyntaxError, ZeroDivisionError, OverflowError):
             await interaction.response.send_message("Invalid mathematical expression.", ephemeral=True)
 
@@ -126,7 +130,7 @@ class Fun(commands.Cog):
     async def cat(self, interaction: discord.Interaction):
         request = await fetch_json("https://api.thecatapi.com/v1/images/search")
         if request and isinstance(request, list) and request[0].get('url'):
-            embed = discord.Embed(title="Here's a cat!")
+            embed = base_embed("Here's a cat!", "primary")
             embed.set_image(url=request[0]['url'])
             await interaction.response.send_message(embed=embed)
         else:
@@ -137,7 +141,7 @@ class Fun(commands.Cog):
     async def dog(self, interaction: discord.Interaction):
         request = await fetch_json("https://dog.ceo/api/breeds/image/random")
         if request and request.get('status') == 'success':
-            embed = discord.Embed(title="Here's a dog!")
+            embed = base_embed("Here's a dog!", "primary")
             embed.set_image(url=request['message'])
             await interaction.response.send_message(embed=embed)
         else:
@@ -174,7 +178,7 @@ class Fun(commands.Cog):
     async def meme(self, interaction: discord.Interaction):
         meme = await self._fetch_meme()
         if meme:
-            embed = discord.Embed(title=meme["title"] or "Here's a meme!", color=discord.Color.random())
+            embed = base_embed(meme["title"] or "Here's a meme!", "primary")
             embed.set_image(url=meme["url"])
             footer = f"r/{meme['subreddit']}"
             if meme.get("ups") is not None:
@@ -221,8 +225,7 @@ class Fun(commands.Cog):
     @app_commands.command(name="serverinfo", description="Shows information about the server.")
     async def serverinfo(self, interaction: discord.Interaction):
         guild = interaction.guild
-        embed = discord.Embed(title=f"{guild.name}", description=guild.description or "",
-                              color=discord.Color.blurple())
+        embed = base_embed(f"{guild.name}", "primary", guild.description or "")
         if guild.icon:
             embed.set_thumbnail(url=guild.icon.url)
         embed.add_field(name="Owner", value=guild.owner.mention if guild.owner else "Unknown", inline=True)

@@ -19,6 +19,7 @@ from cog_utils import (
     record_lockdown,
     remove_lockdown_channel,
 )
+from ui_common import EMOJI, base_embed, truncate
 
 
 def _actor_can_act(actor: discord.Member, target) -> bool:
@@ -43,15 +44,14 @@ async def _modlog(guild, action, actor, target, reason=None, extra=None):
     target_id = str(getattr(target, "id", target))
     case_id = await log_case(str(guild.id), action, str(actor.id), target_id, reason)
 
-    embed = discord.Embed(title=f"\U0001f6e1\ufe0f {action} \u00b7 Case #{case_id}", color=0xed4245)
+    embed = base_embed(f"\U0001f6e1\ufe0f {action} \u00b7 Case #{case_id}", "danger")
     embed.add_field(name="Moderator", value=actor.mention, inline=True)
     target_value = target.mention if hasattr(target, "mention") else str(target)
     embed.add_field(name="Target", value=target_value, inline=True)
     if reason:
-        embed.add_field(name="Reason", value=reason, inline=False)
+        embed.add_field(name="Reason", value=truncate(reason), inline=False)
     if extra:
-        embed.add_field(name="Details", value=extra, inline=False)
-    embed.timestamp = datetime.datetime.now(datetime.timezone.utc)
+        embed.add_field(name="Details", value=truncate(extra), inline=False)
     await log_event(guild, "mod", embed)
     return case_id
 
@@ -109,11 +109,11 @@ async def _unlock_channel(channel: discord.TextChannel) -> str:
 
 def _lockdown_log_embed(title: str, color: int, actor: discord.Member,
                         channels: list[discord.TextChannel]) -> discord.Embed:
-    embed = discord.Embed(title=title, color=color)
+    color_key = "danger" if color == 0xed4245 else "success"
+    embed = base_embed(title, color_key)
     embed.add_field(name="Moderator", value=actor.mention, inline=True)
     embed.add_field(name="Channels", value=" ".join(c.mention for c in channels) or "*none*",
                     inline=False)
-    embed.timestamp = datetime.datetime.now(datetime.timezone.utc)
     return embed
 
 
@@ -347,7 +347,12 @@ class Moderation(commands.Cog):
     @app_commands.checks.has_permissions(ban_members=True)
     @app_commands.checks.bot_has_permissions(ban_members=True)
     async def unban(self, interaction: discord.Interaction, user: discord.User):
-        await interaction.guild.unban(user)
+        try:
+            await interaction.guild.unban(user)
+        except discord.NotFound:
+            await interaction.response.send_message(
+                f"{user.mention} is not banned in this server.", ephemeral=True)
+            return
         await interaction.response.send_message(f"{user.mention} has been unbanned.", ephemeral=True)
         await _modlog(interaction.guild, "Unban", interaction.user, user)
 
@@ -355,6 +360,10 @@ class Moderation(commands.Cog):
     @app_commands.checks.has_permissions(manage_messages=True)
     @app_commands.checks.bot_has_permissions(manage_messages=True)
     async def clear(self, interaction: discord.Interaction, amount: app_commands.Range[int, 1, 100]):
+        if not isinstance(interaction.channel, discord.TextChannel):
+            await interaction.response.send_message(
+                "This command only works in text channels.", ephemeral=True)
+            return
         await interaction.response.defer(ephemeral=True)
         deleted = await interaction.channel.purge(limit=amount)
         await interaction.followup.send(f"Deleted {len(deleted)} messages.", ephemeral=True)
@@ -365,7 +374,7 @@ class Moderation(commands.Cog):
     @app_commands.checks.has_permissions(moderate_members=True)
     async def cases(self, interaction: discord.Interaction):
         rows = await get_recent_cases(str(interaction.guild.id), 10)
-        embed = discord.Embed(title="\U0001f4cb Recent Mod Cases", color=0x5865f2)
+        embed = base_embed(f"{EMOJI['logs']} Recent Mod Cases", "primary")
         if not rows:
             embed.description = "No moderation cases recorded yet."
         else:
@@ -376,7 +385,6 @@ class Moderation(commands.Cog):
                     value=f"Moderator: <@{row['actor_id']}>\nTarget: <@{row['target_id']}>\nReason: {reason}",
                     inline=True,
                 )
-        embed.timestamp = datetime.datetime.now(datetime.timezone.utc)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 

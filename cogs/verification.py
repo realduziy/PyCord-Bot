@@ -7,7 +7,7 @@ import time
 import discord
 from discord import app_commands
 from discord.ext import commands
-from discord.ui import Button, Modal, TextInput, View
+from discord.ui import Button, Modal, Select, TextInput, View
 from PIL import Image, ImageDraw, ImageFont
 
 from cog_utils import (
@@ -18,6 +18,14 @@ from cog_utils import (
     record_verification_attempt,
     set_guild_setting,
 )
+from ui_common import (
+    EMOJI,
+    PanelView,
+    base_embed,
+    ok_embed,
+    yn,
+)
+from cogs._hub import BackToHubButton
 
 CAPTCHA_TTL = 300  # seconds before a captcha code expires
 CAPTCHA_LENGTH = 5
@@ -102,8 +110,8 @@ async def _grant_verified_role(guild: discord.Guild, member: discord.Member) -> 
     cfg = await TicketConfig.fetch(str(guild.id))
     verified_role = guild.get_role(cfg.verified_role) if cfg.verified_role else None
     if not verified_role:
-        return ("No verified role is configured — set one with `/set` > "
-                "**Verified role**, or run `/setup auto`.")
+        return ("No verified role is configured — set one in the **Verification** panel "
+                "via `/setup`, or run `/setup-auto`.")
     if verified_role in member.roles:
         return None  # already has it, nothing to do
     try:
@@ -116,7 +124,7 @@ async def _grant_verified_role(guild: discord.Guild, member: discord.Member) -> 
 
 async def _finish_success(interaction: discord.Interaction, member: discord.Member,
                           manual_by: discord.Member = None):
-    """Shared success path: role + DB + log."""
+    """Shared success path: DB + log (role grant happens before this)."""
     guild_id = str(interaction.guild.id)
     await record_verification_attempt(guild_id, str(member.id), True)
     _failed_attempts.pop(member.id, None)
@@ -142,7 +150,24 @@ async def _finish_failure(guild: discord.Guild, member: discord.Member,
     return fails
 
 
-# --- UI ---
+# --- Status embed (shared by /verification and the /setup hub) ---
+async def verification_status_embed(guild: discord.Guild) -> discord.Embed:
+    cfg = await TicketConfig.fetch(str(guild.id))
+    role = guild.get_role(cfg.verified_role) if cfg.verified_role else None
+    channel = guild.get_channel(cfg.verify_channel) if cfg.verify_channel else None
+    embed = base_embed(f"{EMOJI['verify']} Verification", "primary")
+    embed.add_field(name="Enabled", value=yn(cfg.verification_enabled), inline=True)
+    embed.add_field(name="Mode",
+                    value=MODE_LABELS.get(cfg.verify_mode, cfg.verify_mode), inline=True)
+    embed.add_field(name="Verified role",
+                    value=role.mention if role else f"{EMOJI['no']} Not set", inline=True)
+    embed.add_field(name="Panel channel",
+                    value=channel.mention if channel else f"{EMOJI['no']} Not set",
+                    inline=True)
+    return embed
+
+
+# --- Public, persistent verify panel (posted with /sendverifypanel) ---
 class CaptchaCodeModal(Modal):
     code = TextInput(
         label="Enter the code shown in the image",
@@ -158,7 +183,6 @@ class CaptchaCodeModal(Modal):
     async def on_submit(self, interaction: discord.Interaction):
         member = interaction.user
         guild = interaction.guild
-        guild_id = str(guild.id)
 
         stored = _captcha_codes.pop(member.id, None)
         if stored is None or time.time() > stored[1]:
@@ -173,14 +197,12 @@ class CaptchaCodeModal(Modal):
             if error:
                 await interaction.response.send_message(error, ephemeral=True)
                 return
-            await record_verification_attempt(guild_id, str(member.id), True)
-            _failed_attempts.pop(member.id, None)
             await interaction.response.send_message(
-                "\u2705 Correct! You have been verified. Welcome to the server.", ephemeral=True)
-            await log_event(guild, "verification", _verification_log(
-                guild, "\u2705 Verification Passed", 0x57f287, member))
+                "\u2705 Correct! You have been verified. Welcome to the server.",
+                ephemeral=True)
+            await _finish_success(interaction, member)
         else:
-            await record_verification_attempt(guild_id, str(member.id), False)
+            await record_verification_attempt(str(guild.id), str(member.id), False)
             fails = await _finish_failure(guild, member, "Wrong captcha code entered. ")
             await interaction.response.send_message(
                 f"\u274c That's not the right code ({fails}/{MAX_FAILED_ATTEMPTS} "
@@ -251,8 +273,8 @@ class VerifyPanelView(View):
             description=(
                 "Type the characters shown in the image below, then press "
                 "**Enter Code** and submit them.\n\n"
-                f"• Codes expire after {CAPTCHA_TTL // 60} minutes\n"
-                "• Capitalization doesn't matter"
+                f"\u2022 Codes expire after {CAPTCHA_TTL // 60} minutes\n"
+                "\u2022 Capitalization doesn't matter"
             ),
             color=0x57f287,
         )
@@ -262,98 +284,95 @@ class VerifyPanelView(View):
                                                 view=CaptchaChallengeView(), ephemeral=True)
 
 
+# --- Config panel: same pattern as the auto-mod and logging panels ---
+class VerificationPanelView(PanelView):
+    def __init__(self, guild: discord.Guild):
+        super().__init__()
+        self._build_select(guild)
+        self.add_item(BackToHubButton(row=2))
+
+    def _build_select(self, guild: discord.Guild):
+        options = [
+            discord.SelectOption(label="Mode: Captcha (type a code)",
+                                 value="mode:captcha", emoji="\U0001f9e9"),
+            discord.SelectOption(label="Mode: One-click (no code)",
+                                 value="mode:click", emoji="\U0001f446"),
+        ]
+        # Roles straight in the dropdown — no typing mentions or IDs
+        for role in [r for r in reversed(guild.roles)
+                     if not r.is_default() and not r.managed][:23]:
+            options.append(discord.SelectOption(
+                label=f"Verified role: {role.name}"[:100],
+                value=f"role:{role.id}", emoji="\U0001f3ad"))
+        select = Select(placeholder="Change mode or pick the verified role\u2026",
+                        min_values=1, max_values=1, options=options)
+        select.callback = self._select_callback
+        self.setting_select = select
+        self.add_item(select)
+
+    async def _select_callback(self, interaction: discord.Interaction):
+        if not await self.guard(interaction):
+            return
+        guild_id = str(interaction.guild.id)
+        choice = self.setting_select.values[0]
+        kind, _, payload = choice.partition(":")
+
+        if kind == "mode":
+            await set_guild_setting(guild_id, "verify_mode", payload)
+            await interaction.response.send_message(
+                embed=ok_embed(f"Verification mode set to **{MODE_LABELS[payload]}**."),
+                ephemeral=True)
+        else:  # role
+            role = interaction.guild.get_role(int(payload))
+            await set_guild_setting(guild_id, "verified_role", role.id)
+            await interaction.response.send_message(
+                embed=ok_embed(f"Verified role set to {role.mention}. Anyone who passes "
+                               "verification will now receive it."), ephemeral=True)
+        await self._refresh(interaction)
+
+    async def _refresh(self, interaction: discord.Interaction):
+        try:
+            view = VerificationPanelView(interaction.guild)
+            await interaction.edit_original_response(
+                embed=await verification_status_embed(interaction.guild), view=view)
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            pass
+
+    @discord.ui.button(label="Toggle Verification", style=discord.ButtonStyle.primary,
+                       emoji=EMOJI["verify"], custom_id="vf_toggle_btn", row=0)
+    async def toggle(self, interaction: discord.Interaction, button: Button):
+        if not await self.guard(interaction):
+            return
+        guild_id = str(interaction.guild.id)
+        cfg = await TicketConfig.fetch(guild_id)
+        await set_guild_setting(guild_id, "verification_enabled",
+                                0 if cfg.verification_enabled else 1)
+        if cfg.verification_enabled:
+            await interaction.response.send_message(
+                embed=ok_embed("Verification **disabled**."), ephemeral=True)
+        else:
+            role = (interaction.guild.get_role(cfg.verified_role)
+                    if cfg.verified_role else None)
+            note = "" if role else ("\n\n\u26a0\ufe0f No verified role set — pick one in "
+                                    "the dropdown below.")
+            await interaction.response.send_message(
+                embed=ok_embed("Verification **enabled**." + note), ephemeral=True)
+        await self._refresh(interaction)
+
+    @discord.ui.button(label="Refresh", style=discord.ButtonStyle.success,
+                       emoji=EMOJI["refresh"], custom_id="vf_refresh_btn", row=0)
+    async def refresh_btn(self, interaction: discord.Interaction, button: Button):
+        if not await self.guard(interaction):
+            return
+        await interaction.response.edit_message(
+            embed=await verification_status_embed(interaction.guild),
+            view=VerificationPanelView(interaction.guild))
+
+
 # --- Cog ---
 class Verification(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-
-    @app_commands.command(name="verification", description="Configure the verification system.")
-    @app_commands.describe(
-        action="What to change",
-        value="Required for Mode: `captcha` or `click`",
-    )
-    @app_commands.choices(action=[
-        app_commands.Choice(name="Status", value="status"),
-        app_commands.Choice(name="Enable", value="enable"),
-        app_commands.Choice(name="Disable", value="disable"),
-        app_commands.Choice(name="Set role (mention it in value)", value="role"),
-        app_commands.Choice(name="Mode", value="mode"),
-    ])
-    @app_commands.checks.has_permissions(manage_guild=True)
-    async def verification(self, interaction: discord.Interaction,
-                           action: app_commands.Choice[str], value: str = None):
-        guild_id = str(interaction.guild.id)
-        await ensure_guild_config(guild_id)
-        cfg = await TicketConfig.fetch(guild_id)
-
-        if action.value == "status":
-            role = interaction.guild.get_role(cfg.verified_role) if cfg.verified_role else None
-            embed = discord.Embed(title="\U0001f39f\ufe0f Verification Status", color=0x5865f2)
-            embed.add_field(name="Enabled",
-                            value="\u2705 Yes" if cfg.verification_enabled else "\u274c No",
-                            inline=True)
-            embed.add_field(name="Mode", value=MODE_LABELS.get(cfg.verify_mode, cfg.verify_mode),
-                            inline=True)
-            embed.add_field(name="Verified role",
-                            value=role.mention if role else "\u274c Not set", inline=True)
-            embed.add_field(name="Panel channel",
-                            value=interaction.guild.get_channel(cfg.verify_channel).mention
-                            if cfg.verify_channel and interaction.guild.get_channel(cfg.verify_channel)
-                            else "\u274c Not set", inline=True)
-            await interaction.response.send_message(embed=embed, ephemeral=True)
-            return
-
-        if action.value == "enable":
-            await set_guild_setting(guild_id, "verification_enabled", 1)
-            role = interaction.guild.get_role(cfg.verified_role) if cfg.verified_role else None
-            note = ""
-            if not role:
-                note = ("\n\n\u26a0\ufe0f No verified role is set — configure one with "
-                        "`/set` > **Verified role**, or run `/setup auto`.")
-            await interaction.response.send_message(
-                "\u2705 Verification is now **enabled**." + note, ephemeral=True)
-            return
-
-        if action.value == "disable":
-            await set_guild_setting(guild_id, "verification_enabled", 0)
-            await interaction.response.send_message(
-                "\u274c Verification is now **disabled**.", ephemeral=True)
-            return
-
-        if action.value == "role":
-            if not value:
-                await interaction.response.send_message(
-                    "Mention the role, e.g. `@Verified` or its ID.", ephemeral=True)
-                return
-            import re
-            match = re.match(r"^(?:<@&(\d+)>|(\d+))$", value.strip())
-            raw_id = int(match.group(1) or match.group(2)) if match else None
-            role = interaction.guild.get_role(raw_id) if raw_id else None
-            if role is None:
-                name_match = discord.utils.get(interaction.guild.roles, name=value.strip().lstrip("@"))
-                role = name_match
-            if role is None or role.is_default():
-                await interaction.response.send_message(
-                    "Couldn't find that role — mention it (`@Verified`) or paste its ID.",
-                    ephemeral=True)
-                return
-            await set_guild_setting(guild_id, "verified_role", role.id)
-            await interaction.response.send_message(
-                f"\u2705 Verified role set to {role.mention}. Anyone who passes verification "
-                f"will now receive it.", ephemeral=True)
-            return
-
-        if action.value == "mode":
-            if not value or value.lower() not in ("captcha", "click"):
-                await interaction.response.send_message(
-                    "Use `captcha` (users type a code from an image) or `click` "
-                    "(users just press the button).", ephemeral=True)
-                return
-            mode = value.lower()
-            await set_guild_setting(guild_id, "verify_mode", mode)
-            await interaction.response.send_message(
-                f"\u2705 Verification mode set to **{MODE_LABELS[mode]}**.", ephemeral=True)
-            return
 
     @app_commands.command(name="sendverifypanel", description="Send the verification panel (goes to the configured verify channel).")
     @app_commands.checks.has_permissions(manage_guild=True)
@@ -411,11 +430,10 @@ class Verification(commands.Cog):
         stats = await get_verification_stats(str(interaction.guild.id))
         total = stats["success"] + stats["failure"]
         rate = f"{stats['success'] / total * 100:.0f}%" if total else "n/a"
-        embed = discord.Embed(title="\U0001f4ca Verification Statistics", color=0x5865f2)
+        embed = base_embed(f"{EMOJI['verify']} Verification Statistics", "primary")
         embed.add_field(name="\u2705 Passed", value=stats["success"], inline=True)
         embed.add_field(name="\u274c Failed", value=stats["failure"], inline=True)
         embed.add_field(name="Pass rate", value=rate, inline=True)
-        embed.timestamp = datetime.datetime.now(datetime.timezone.utc)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 

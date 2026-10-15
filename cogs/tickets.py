@@ -8,7 +8,7 @@ import aiosqlite
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
-from discord.ui import Button, View, Select, Modal, TextInput
+from discord.ui import Button, Modal, Select, TextInput, View
 
 from cog_utils import (
     DB_FILE,
@@ -20,7 +20,6 @@ from cog_utils import (
     is_blacklisted,
     log_event,
     set_blacklisted,
-    set_guild_setting,
 )
 
 INACTIVITY_DAYS = 3  # auto-close tickets after this many days without messages
@@ -34,6 +33,12 @@ NO_STAFF_EMBED = discord.Embed(
     color=0xfee75c
 )
 
+CATEGORY_TITLES = {
+    "general": "\u2753 General Support",
+    "report": "\U0001f6e1\ufe0f Report a User",
+    "suggestion": "\U0001f4a1 Suggestion",
+}
+
 
 def can_manage_tickets(user: discord.Member, support_role: discord.Role | None) -> bool:
     """Support staff check shared by Claim and Close."""
@@ -45,6 +50,21 @@ async def is_support_check(interaction: discord.Interaction) -> bool:
     cfg = await TicketConfig.fetch(str(interaction.guild.id))
     role = interaction.guild.get_role(cfg.ticket_support_role) if cfg.ticket_support_role else None
     return can_manage_tickets(interaction.user, role)
+
+
+def ticket_panel_embed() -> discord.Embed:
+    """The public 'open a ticket' panel — one builder used everywhere."""
+    return discord.Embed(
+        title="\U0001f4e9 Support & Help Desk",
+        description=(
+            "Select an option from the menu below to open a private ticket.\n\n"
+            "**Available Categories:**\n"
+            "\u2753 **General Support** \u2013 Help with questions or server features\n"
+            "\U0001f6e1\ufe0f **Report a User** \u2013 Report rule violations or player behavior\n"
+            "\U0001f4a1 **Suggestions** \u2013 Share ideas and feedback for the server"
+        ),
+        color=0x5865f2
+    ).set_footer(text="Please refrain from opening tickets without a reason.")
 
 
 def ticket_log_embed(title: str, color: int) -> discord.Embed:
@@ -116,7 +136,8 @@ async def perform_close(channel: discord.TextChannel, reason: str, closer: str,
 
     if not ticket_info:
         if interaction and interaction.response.is_done():
-            await interaction.followup.send("This channel is not an active ticket in the database.", ephemeral=True)
+            await interaction.followup.send("This channel is not an active ticket in the database.",
+                                            ephemeral=True)
         return
 
     cfg = await TicketConfig.fetch(guild_id)
@@ -262,14 +283,10 @@ class TicketCategorySelect(Select):
             await db.commit()
         _open_ticket_channels.add(ticket_channel.id)
 
-        category_titles = {
-            "general": "\u2753 General Support",
-            "report": "\U0001f6e1\ufe0f Report a User",
-            "suggestion": "\U0001f4a1 Suggestion"
-        }
+        title = CATEGORY_TITLES.get(selected_category, "Support")
 
         embed = discord.Embed(
-            title=f"Ticket: {category_titles.get(selected_category, 'Support')}",
+            title=f"Ticket: {title}",
             description=(
                 f"Welcome {interaction.user.mention}!\n\n"
                 "Please detail your request below. "
@@ -278,7 +295,7 @@ class TicketCategorySelect(Select):
             color=0x2b2d31
         )
         embed.add_field(name="Opened By", value=interaction.user.mention, inline=True)
-        embed.add_field(name="Category", value=category_titles.get(selected_category, selected_category.capitalize()), inline=True)
+        embed.add_field(name="Category", value=title, inline=True)
         embed.add_field(name="Claimed By", value="*Unclaimed*", inline=True)
         embed.set_footer(text="Use the controls below to manage or close this ticket.")
 
@@ -289,7 +306,7 @@ class TicketCategorySelect(Select):
 
         open_log = ticket_log_embed("\U0001f4e9 Ticket Opened", 0x57f287)
         open_log.add_field(name="User", value=f"{interaction.user} (<@{interaction.user.id}>)", inline=True)
-        open_log.add_field(name="Category", value=category_titles.get(selected_category, selected_category), inline=True)
+        open_log.add_field(name="Category", value=title, inline=True)
         open_log.add_field(name="Channel", value=ticket_channel.mention, inline=True)
         await log_event(guild, "tickets", open_log)
 
@@ -441,6 +458,20 @@ class TicketControlsView(View):
         await interaction.response.send_modal(CloseReasonModal())
 
 
+async def post_ticket_panel(guild: discord.Guild, fallback: discord.abc.GuildChannel):
+    """Send the ticket panel to the configured panel channel (or `fallback`).
+
+    Shared by /sendticketpanel and the /setup hub so both behave identically.
+    Returns the channel the panel was sent to.
+    """
+    cfg = await TicketConfig.fetch(str(guild.id))
+    panel_channel = guild.get_channel(cfg.ticket_panel_channel) if cfg.ticket_panel_channel else None
+    if panel_channel is None:
+        panel_channel = fallback
+    await panel_channel.send(embed=ticket_panel_embed(), view=TicketPanelView())
+    return panel_channel
+
+
 class Tickets(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -459,7 +490,7 @@ class Tickets(commands.Cog):
     # --- Auto-claim: first support message in an unclaimed ticket claims it ---
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        if message.author.bot or not message.guild:
+        if message.author.bot or not message.guild or not message.content:
             return
         if message.channel.id not in _open_ticket_channels:
             return
@@ -652,28 +683,11 @@ class Tickets(commands.Cog):
     @app_commands.command(name="sendticketpanel", description="Sends the formatted ticket creation panel.")
     @app_commands.checks.has_permissions(manage_channels=True)
     async def sendticketpanel(self, interaction: discord.Interaction):
-        guild_id = str(interaction.guild.id)
-        await ensure_guild_config(guild_id)
-
-        cfg = await TicketConfig.fetch(guild_id)
-        panel_channel = (interaction.guild.get_channel(cfg.ticket_panel_channel)
-                         if cfg.ticket_panel_channel else interaction.channel)
-
-        embed = discord.Embed(
-            title="\U0001f4e9 Support & Help Desk",
-            description=(
-                "Select an option from the menu below to open a private ticket.\n\n"
-                "**Available Categories:**\n"
-                "\u2753 **General Support** \u2013 Help with questions or server features\n"
-                "\U0001f6e1\ufe0f **Report a User** \u2013 Report rule violations or player behavior\n"
-                "\U0001f4a1 **Suggestions** \u2013 Share ideas and feedback for the server"
-            ),
-            color=0x5865f2
-        )
-        embed.set_footer(text="Please refrain from opening tickets without a reason.")
-
-        await panel_channel.send(embed=embed, view=TicketPanelView())
-        await interaction.response.send_message("Ticket panel sent!", ephemeral=True)
+        await ensure_guild_config(str(interaction.guild.id))
+        # post_ticket_panel falls back to this channel when none is configured
+        # or when the configured channel has been deleted
+        channel = await post_ticket_panel(interaction.guild, interaction.channel)
+        await interaction.response.send_message(f"Ticket panel sent to {channel.mention}!", ephemeral=True)
 
 
 async def setup(bot):
