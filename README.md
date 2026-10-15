@@ -19,6 +19,7 @@ A multipurpose Discord bot coded in Python using [discord.py](https://github.com
 
 - [Key Features](#-key-features)
 - [Installation & Setup](#-installation--setup)
+- [Multiple Servers](#-multiple-servers)
 - [Configuration](#-configuration)
 - [Command Overview](#-command-overview)
 - [Troubleshooting](#-troubleshooting)
@@ -77,6 +78,19 @@ python main.py
 > The database (`bot_data.db`) is created and migrated automatically on first run — no manual setup needed. Your data is preserved between updates, and stale references (deleted channels/roles) are cleaned up automatically every 6 hours. Use `/cleanupdb` to run a cleanup on demand.
 
 ---
+
+## 🌐 Multiple Servers
+
+The bot works in **any number of servers at the same time**. Every server's settings — tickets, voice hubs, lockdown defaults, auto-mod, verification, logs — are stored separately in the database, so nothing ever leaks between servers.
+
+**To add the bot to another server:**
+1. Make sure **Public Bot** is enabled in the [Discord Developer Portal](https://discord.com/developers/applications) → your app → **Bot** (or use an invite link with your client's ID)
+2. Invite it with the `bot` and `applications.commands` scopes
+3. Run **`/setup auto`** in the new server — the bot detects the new server and configures everything from scratch
+4. Each server manages itself independently (`/setup`, `/logsettings`, etc. only affect the server you run them in)
+
+> [!NOTE]
+> Slash commands can take up to an hour to appear in a brand-new server for the first time. Kicking and re-inviting, or restarting the bot, usually speeds this up.
 
 ## 🔧 Configuration
 
