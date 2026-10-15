@@ -1,6 +1,3 @@
-Here is the complete raw Markdown block ready to copy and paste directly into your `README.md` file on GitHub:
-
-```markdown
 # PyCord-Bot
 
 A simple multipurpose Discord bot coded in Python using [discord.py](https://github.com/Rapptz/discord.py).
@@ -32,26 +29,18 @@ Make sure you have **Python 3.15** installed on your system.
 
 1. Place your `requirements.txt` file in the project folder.
 2. Open your terminal in that folder and run:
-   ```bash
-   pip install -r requirements.txt --upgrade
 
-```
+pip install -r requirements.txt --upgrade
 
 ### Troubleshooting Installation
 
 * **If the first command fails, try:**
-```bash
+
 python -m pip install -r requirements.txt --upgrade
 
-```
-
-
 * **Make sure pip is fully updated:**
-```bash
+
 python -m pip install --upgrade pip
-
-```
-
 
 * **Still having issues?** Try completely uninstalling Python and grabbing the newest version directly from the [Python Downloads Page](https://www.python.org/downloads/).
 
@@ -65,15 +54,11 @@ If you find a bug, let me know via Discord (`@duziy`) or open an issue on GitHub
 
 ## 📋 To-Do List
 
-* [x] **Refactor to Cogs:** Converted the entire codebase over to Cogs for cleaner structure and organization.
-* [x] **Setup Command:** Added a quick setup command for server configuration.
-* [x] **Ticket System Updates:** Made progress expanding and refining the ticket system.
-* [ ] **Logging System:** Basic version is done. Expand it for Log Auto-Moderation, custom Ticket transcript channels, and Verification logs.
-* [ ] **Auto-Moderation:** Make logged events fully customizable.
-* [ ] **Verification System:** Track and log successful/failed verifications.
-* [ ] **Lockdown Command:** Overhaul it so you can select default channels to lockdown (defaults to the current channel if none are selected).
-* [ ] **Music Integration:** Add support for Spotify and YouTube playback.
-
-```
-
-```
+- [x] **Refactor to Cogs:** Converted the entire codebase over to Cogs for cleaner structure and organization.
+- [x] **Setup Command:** Added a quick setup command for server configuration.
+- [x] **Ticket System Updates:** Made progress expanding and refining the ticket system.
+- [ ] **Logging System:** Basic version is done. Expand it for Log Auto-Moderation, custom Ticket transcript channels, and Verification logs.
+- [ ] **Auto-Moderation:** Make logged events fully customizable.
+- [ ] **Verification System:** Track and log successful/failed verifications.
+- [ ] **Lockdown Command:** Overhaul it so you can select default channels to lockdown (defaults to the current channel if none are selected).
+- [ ] **Music Integration:** Add support for Spotify and YouTube playback.
