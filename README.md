@@ -35,12 +35,12 @@ A multipurpose Discord bot coded in Python using [discord.py](https://github.com
 | 🧩 **Modular Cog Architecture** | The codebase is fully organized into Cogs for cleaner code and easier maintenance. |
 | ⚙️ **One-Click Server Setup** | `/setup auto` creates and configures channels, roles, and categories automatically — or use `/setup` to check what's missing and `/set` to configure individual settings. |
 | 🎫 **Ticket System** | Full ticketing workflow — support panel with category selection, ticket claiming (with leaderboard), close-reason modal, automatic transcripts sent to a custom channel, blacklisting, and ticket statistics. |
-| 📋 **Customizable Logging** | Every loggable event (moderation, auto-mod, tickets, verification, joins/leaves, lockdowns) can be toggled on or off per server with `/logsettings`. |
-| 🛡️ **Auto-Moderation** | Configurable filters for blocked words (with comma-separated batch add/remove), Discord invites, external links, excessive caps, mass mentions, and message spam — with an optional staff permission bypass. |
+| 📋 **Full Audit Logging** | Message deletes/edits, channel & role changes, manual bans/timeouts (even done by hand), invites, nickname/role changes, joins/leaves — all toggleable per category through the interactive `/logsettings` panel. |
+| 🛡️ **Auto-Moderation** | Configurable filters for blocked words (with comma-separated batch add/remove), Discord invites, external links, excessive caps, mass mentions, and message spam — with an optional staff permission bypass and per-channel exemptions. |
 | 🎟️ **Verification System** | Captcha or one-click verification with full success/failure logging, statistics, and manual verification for staff. |
 | 🔒 **Lockdown System** | Lock channels instantly — pick defaults with `/lockdown defaults`, or fall back to the current channel. Previous permission states are restored on unlock. |
-| 🎙️ **Temporary Voice Channels** | VoiceMaster-style hubs: join a hub channel to spawn your own temp channel (named `User's Lounge`), ownership transfers when you leave, and empty channels are deleted automatically. Use an existing channel or create a new hub — no templates needed. |
-| 🧹 **Self-Maintaining Database** | Automatically removes stale entries (deleted channels, roles, guilds) on startup and every 6 hours — or run `/cleanupdb` anytime to see what was pruned. |
+| 🎙️ **Temporary Voice Channels** | VoiceMaster-style hubs: join a hub to spawn your own temp channel (named `User's Lounge`) with a pinned control panel in its built-in chat — lock, user limit, rename, invite, kick. Ownership transfers when you leave; empty channels are deleted automatically. |
+| 🧹 **Self-Maintaining Database** | Automatically removes stale entries (deleted channels, roles, guilds) every 6 hours, creates a rolling daily backup (newest 7 kept), and rotates the log file — or run `/cleanupdb` / `/backup` on demand. |
 | 🔨 **Moderation Tools** | Mute, kick, ban, unban, unmute, message purge, and a persistent mod-case history. |
 
 ---
@@ -75,7 +75,7 @@ python main.py
 ```
 
 > [!TIP]
-> The database (`bot_data.db`) is created and migrated automatically on first run — no manual setup needed. Your data is preserved between updates, and stale references (deleted channels/roles) are cleaned up automatically every 6 hours. Use `/cleanupdb` to run a cleanup on demand.
+> The database (`bot_data.db`) is created and migrated automatically on first run — no manual setup needed. Your data is preserved between updates, a fresh backup is saved daily to `backups/` (newest 7 kept), and stale references are cleaned up every 6 hours. Use `/backup` or `/cleanupdb` to run either on demand.
 
 ---
 
@@ -111,6 +111,7 @@ Once the bot is in your server, configure it with slash commands:
 | `/set` | Configure any bot setting (channels, roles, messages) |
 | `/setup` | Show a configuration checklist for this server |
 | `/setup auto` | Automatically create and configure channels/roles/categories |
+| `/backup` | Create a database backup on demand (auto-backup runs daily) |
 | `/cleanupdb` | Remove database entries pointing at deleted channels/roles/guilds |
 | `/help` | Show all available commands |
 
@@ -126,7 +127,7 @@ Once the bot is in your server, configure it with slash commands:
 ### Auto-Moderation
 | Command | Description |
 | --- | --- |
-| `/automod` | Configure filters: words, invites, links, caps, mentions, staff bypass |
+| `/automod` | Configure filters: words, invites, links, caps, mentions, staff bypass, exempt channels |
 
 ### Verification
 | Command | Description |
@@ -156,7 +157,7 @@ Once the bot is in your server, configure it with slash commands:
 ### Logging
 | Command | Description |
 | --- | --- |
-| `/logsettings` | Toggle which events are logged |
+| `/logsettings` | Interactive panel — dropdown-toggle every log category (moderation, messages, channels, roles, invites, members, tickets, verification, voice, lockdowns, auto-mod) |
 | `/logstatus` | Show current log settings |
 
 ---
@@ -182,6 +183,8 @@ python -m pip install --upgrade pip
 | `TOKEN not found` | Make sure your `.env` file is in the same folder as `main.py` and contains `TOKEN=...` |
 | Bot doesn't respond to slash commands | Wait a minute for commands to sync, or re-invite the bot with the `applications.commands` scope |
 | Role not assigned on verification | Make sure the bot's highest role is **above** the Verified role in Server Settings → Roles |
+| Log embeds never arrive | The console says why: no log channel set, channel deleted, or missing Send Messages/Embed Links — fix perms in the log channel |
+| Deleted message shows "not in cache" | The message was older than the bot's cache window — content is unrecoverable, but the delete is still logged |
 
 ---
 
@@ -200,7 +203,9 @@ If you find a bug, let me know via Discord (`@duziy`) or open an issue on GitHub
 - [x] **Auto-Moderation** — Fully customizable filters with logged events, batch word management, and a toggleable staff bypass.
 - [x] **Verification System** — Tracks and logs successful/failed verifications, with captcha or one-click modes and statistics.
 - [x] **Lockdown Command** — Overhauled: configurable default channels, current-channel fallback, and automatic restoration of previous permissions.
-- [x] **Temporary Voice Channels** — VoiceMaster-style hubs: join to create your own channel, automatic ownership transfer, and deletion when empty.
+- [x] **Temporary Voice Channels** — VoiceMaster-style hubs: join to create your own channel with a control panel (lock, limit, rename, invite, kick), automatic ownership transfer, and deletion when empty.
+- [x] **Full Audit Logging** — Messages, channels, roles, bans/timeouts, invites, and member changes — all toggleable through an interactive panel.
+- [x] **Database Maintenance** — Daily rolling backups, automatic stale-entry cleanup, and log file rotation.
 - [ ] **Music Integration** — Add support for Spotify and YouTube playback.
 
 ---
