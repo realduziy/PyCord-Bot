@@ -3,7 +3,7 @@
 A simple multipurpose Discord bot coded in Python using [discord.py](https://github.com/Rapptz/discord.py).
 
 > [!NOTE]
-> This bot is in active development. Most of the code was put together with the help of AI (ChatGPT), StackOverflow, and YouTube tutorials!
+> This bot is in active development. Most of the code was put together with the help of AI, StackOverflow, and YouTube tutorials!
 
 ---
 
