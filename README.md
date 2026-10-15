@@ -4,7 +4,7 @@
 
 A multipurpose Discord bot coded in Python using [discord.py](https://github.com/Rapptz/discord.py).
 
-![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.15%2B-blue?logo=python&logoColor=white)
 ![discord.py](https://img.shields.io/badge/discord.py-2.7.1-5865F2?logo=discord&logoColor=white)
 ![License](https://img.shields.io/badge/Status-Active%20Development-green)
 
@@ -46,7 +46,7 @@ A multipurpose Discord bot coded in Python using [discord.py](https://github.com
 
 ### Prerequisites
 
-- **Python 3.10 or newer** — check with `python --version`
+- **Python 3.15** (recommended — the bot is developed and tested on it; 3.10 and newer also work) — check with `python --version`
 - A Discord bot token from the [Discord Developer Portal](https://discord.com/developers/applications)
 
 ### 1️⃣ Install dependencies
