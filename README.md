@@ -1,90 +1,51 @@
 # PyCord-Bot
 
-<div align="center">
+A multipurpose Discord bot written in Python with [discord.py](https://github.com/Rapptz/discord.py). Works in any number of servers at once — every server's settings are stored separately.
 
-A multipurpose Discord bot coded in Python using [discord.py](https://github.com/Rapptz/discord.py).
+> This bot is in active development. Much of the code was written with the help of AI, Stack Overflow, and YouTube tutorials.
 
-![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)
-![discord.py](https://img.shields.io/badge/discord.py-2.7.1-5865F2?logo=discord&logoColor=white)
-![License](https://img.shields.io/badge/Status-Active%20Development-green)
+## Features
 
-</div>
+- **Setup hub** — everything is configured from `/setup`: auto-mod, verification, logging, channel/role settings, and a one-click quick setup that creates channels and roles for you. Every panel has a Back button.
+- **Tickets** — category-based support panel, claiming with a leaderboard, close-reason modal, HTML-free transcripts (an info embed plus a plain `.txt` log), blacklisting, and auto-close after 3 days of inactivity.
+- **Audit logging** — message deletes/edits, channel and role changes, bans and timeouts (even manual ones), invites, nickname and role changes, joins/leaves. Each category can be toggled on or off.
+- **Auto-moderation** — blocked words (batch add/remove), Discord invites, external links, caps, mass mentions, and spam. Optional staff bypass and per-channel exemptions.
+- **Verification** — captcha or one-click, with success/failure logging, stats, and manual verify for staff.
+- **Lockdown** — lock or unlock channels instantly, with configurable default channels and automatic permission restoration.
+- **Temporary voice channels** — join a hub to get your own channel with a control panel (lock, limit, rename, invite, kick). Empty channels clean themselves up.
+- **Moderation** — mute/unmute, kick, ban/unban, purge, and a persistent mod-case history.
+- **Self-maintaining database** — config rows create themselves, stale entries are only removed after Discord confirms they're really gone, and a rolling daily backup is kept.
 
-> [!NOTE]
-> This bot is in active development. Most of the code was put together with the help of AI, Stack Overflow, and YouTube tutorials!
+## Requirements
 
----
+- Python 3.10 or newer (developed on 3.15)
+- A bot token from the [Discord Developer Portal](https://discord.com/developers/applications)
 
-## 📖 Table of Contents
+## Setup
 
-- [Key Features](#-key-features)
-- [Installation & Setup](#-installation--setup)
-- [Running with Docker](#-running-with-docker)
-- [Multiple Servers](#-multiple-servers)
-- [Configuration](#-configuration)
-- [Command Overview](#-command-overview)
-- [Troubleshooting](#-troubleshooting)
-- [Bug Reports](#-bug-reports)
-- [To-Do List](#-to-do-list)
+1. Install dependencies:
 
----
+   ```bash
+   pip install -r requirements.txt --upgrade
+   ```
 
-## ⚡ Key Features
+2. Create a file named `.env` next to `main.py` containing your token:
 
-| Feature | Description |
-| --- | --- |
-| 🧩 **Modular Cog Architecture** | The codebase is fully organized into Cogs for cleaner code and easier maintenance. |
-| 🎛️ **Unified Setup Hub** | Everything is configured from one place: `/setup` opens an interactive hub — Auto-Mod, Verification, Log Settings, and Server Settings panels, plus one-click Quick Setup. Every panel has ⬅️ Back navigation and matching ✅/❌ feedback. |
-| 🎫 **Ticket System** | Full ticketing workflow — support panel with category selection, ticket claiming (with leaderboard in `/ticketstats`), close-reason modal, automatic HTML transcripts sent to a custom channel and DM'd to the opener, blacklisting, and inactivity auto-close. |
-| 📋 **Full Audit Logging** | Message deletes/edits, channel & role changes, manual bans/timeouts (even done by hand), invites, nickname/role changes, joins/leaves — all toggleable per category from the hub's Log Settings panel. |
-| 🛡️ **Auto-Moderation** | Configurable filters for blocked words (with comma-separated batch add/remove), Discord invites, external links, excessive caps, mass mentions, and message spam — with an optional staff bypass and per-channel exemptions. |
-| 🎟️ **Verification System** | Captcha or one-click verification with success/failure logging, statistics, and manual verification for staff. |
-| 🔒 **Lockdown System** | Lock channels instantly — pick defaults with `/lockdown defaults`, or fall back to the current channel. Previous permission states are restored on unlock. |
-| 🎙️ **Temporary Voice Channels** | VoiceMaster-style hubs: join a hub to spawn your own temp channel with a control panel in its chat — lock, user limit, rename, invite, kick. Empty channels are deleted automatically. |
-| 🧹 **Self-Healing Database** | Config rows create themselves on demand, stale entries are only removed after Discord confirms they're really gone (never on a cache guess), a rolling daily backup runs automatically (newest 7 kept), and the bot logs a per-guild config summary at startup. |
-| 🔨 **Moderation Tools** | Mute, kick, ban, unban, unmute, message purge, and a persistent mod-case history. |
+   ```env
+   TOKEN=your_token_here
+   ```
 
----
+3. Run the bot:
 
-## 📦 Installation & Setup
+   ```bash
+   python main.py
+   ```
 
-### Prerequisites
+The database (`bot_data.db`) is created automatically on first run. Data is kept between restarts, a backup is saved daily to `backups/` (newest 7 kept), and stale entries are cleaned every 6 hours.
 
-- **Python 3.10 or newer** (developed on 3.15) — check with `python --version`
-- A Discord bot token from the [Discord Developer Portal](https://discord.com/developers/applications)
+## Running with Docker
 
-### 1️⃣ Install dependencies
-
-Clone or download the project, then open a terminal in the project folder and run:
-
-```bash
-pip install -r requirements.txt --upgrade
-```
-
-> `PyNaCl` is included for voice support — if you skip it, voice channels won't work.
-
-### 2️⃣ Configure your token
-
-Create a file named `.env` in the project folder with your bot token:
-
-```env
-TOKEN=your_token_here
-```
-
-### 3️⃣ Run the bot
-
-```bash
-python main.py
-```
-
-> [!TIP]
-> The database (`bot_data.db`) is created automatically on first run — no manual setup needed. Your data is preserved between updates, a fresh backup is saved daily to `backups/` (newest 7 kept), and stale references are cleaned up every 6 hours. Use `/backup` or `/cleanupdb` to run either on demand.
-
----
-
-## 🐳 Running with Docker
-
-A `Dockerfile` is included. The important detail: **the app runs from `/app` inside the container**, so volumes must mount there — mounting anywhere else means your data lives in the container layer and is lost on every rebuild.
+The app runs from `/app` inside the container, so the volumes must mount there:
 
 ```bash
 docker build -t pycord-bot .
@@ -95,7 +56,7 @@ docker run -d --name discord-bot --restart unless-stopped \
 docker logs -f discord-bot
 ```
 
-Keep `.env` and database files out of the image with a `.dockerignore`:
+Add a `.dockerignore` so secrets and data don't get baked into the image:
 
 ```dockerignore
 bot_data.db
@@ -106,151 +67,91 @@ __pycache__/
 *.pyc
 ```
 
-> [!WARNING]
-> If Docker ever creates a **directory** named `bot_data.db` on the host (it does this when a `-v` source file doesn't exist), delete it and `touch bot_data.db` before restarting — SQLite can't open a directory, and `COPY . .` would bake it into the image.
->
-> Also make sure only **one** bot container is ever running — two bots on one database will fight over it.
+Two things to watch out for:
 
----
+- If Docker ever creates a **folder** named `bot_data.db` on the host (it does that when the file doesn't exist), delete it and `touch bot_data.db` before restarting — SQLite can't open a directory.
+- Only ever run **one** bot container at a time. Two bots sharing one database will corrupt it.
 
-## 🌐 Multiple Servers
+## Using the bot
 
-The bot works in **any number of servers at the same time**. Every server's settings — tickets, voice hubs, lockdown defaults, auto-mod, verification, logs — are stored separately in the database, so nothing ever leaks between servers.
+1. Invite the bot with the `bot` and `applications.commands` scopes.
+2. Run `/setup` and click **Quick Setup** (or run `/setup-auto`). It creates and wires up the log channel, transcripts channel, verify channel, support and verified roles, ticket category, and a voice hub — skipping anything you've already set.
+3. Post the public panels with `/sendticketpanel` and `/sendverifypanel`.
+4. Adjust anything from the `/setup` panels. The **Server Settings** panel covers channels, roles, and messages; it also has an "enter manually" option if your server has more roles or channels than the dropdown can show (Discord's list caps at 25).
+5. Turn on auto-mod, verification, and pick which log categories you want from their panels.
 
-**To add the bot to another server:**
-1. Make sure **Public Bot** is enabled in the [Discord Developer Portal](https://discord.com/developers/applications) → your app → **Bot**
-2. Invite it with the `bot` and `applications.commands` scopes
-3. Run **`/setup`** in the new server → click **Quick Setup** (or `/setup-auto`) — the bot creates and wires up channels, roles, and the voice hub for that server only
-4. Each server manages itself independently — panels only affect the server you open them in
+Settings are per-server. If you set something in one server it won't appear in another — run the setup steps in each server you use.
 
-> [!NOTE]
-> Slash commands can take up to an hour to appear in a brand-new server for the first time. Restarting the bot usually speeds this up.
+Slash commands can take up to an hour to show up in a brand-new server for the first time.
 
-## 🔧 Configuration
+## Commands
 
-Everything is configured from the **`/setup` hub**. Open it and you'll see a live status board plus five buttons:
+Setup and utilities:
 
-| Button | What it does |
-| --- | --- |
-| 🛡️ **Auto-Mod** | Toggle the filter on/off, flip invites/links/staff-bypass, and adjust caps %, mention limits, blocked words and exempt channels |
-| 🎟️ **Verification** | Toggle on/off, switch between Captcha and One-click, pick the verified role |
-| 📋 **Log Settings** | Dropdown-toggle every log category |
-| 🛠️ **Server Settings** | Set log/join/leave/ticket/transcripts/verify channels, ticket category, support & verified roles, and join/leave messages — all from dropdowns (with an **⌨️ Enter manually** fallback when a server has more than 25 channels/roles) |
-| ⚡ **Quick Setup** | Creates everything missing in one go |
+- `/setup` — configuration hub (all settings panels live here)
+- `/setup-auto` — create and configure channels/roles/categories automatically
+- `/logstatus` — show which log events are enabled
+- `/backup` — database backup on demand
+- `/cleanupdb` — remove database entries confirmed to point at deleted things
+- `/help` — command list
 
-Every panel answers with the same ✅/❌ embeds and has a ⬅️ **Back** button that returns you to the hub in-place. Config actions require the **Manage Server** permission (Quick Setup requires Administrator), checked at click time.
+Moderation:
 
-After Quick Setup, post the public panels with **`/sendticketpanel`** and **`/sendverifypanel`**.
+- `/mute` `/unmute` — timeout or remove a timeout
+- `/kick` `/ban` `/unban`
+- `/clear` — purge up to 100 messages
+- `/cases` — recent mod cases
+- `/lockdown start` `/lockdown end` `/lockdown defaults`
 
----
+Tickets:
 
-## 🗂️ Command Overview
+- `/sendticketpanel` — post the ticket panel
+- `/closeticket` — close a ticket
+- `/ticketadd` `/ticketremove` — add or remove a user from a ticket
+- `/ticketblacklist` — block users from opening tickets
+- `/ticketstats` — stats and claim leaderboard
 
-### Setup & Utilities
-| Command | Description |
-| --- | --- |
-| `/setup` | Configuration hub — status board + all settings panels |
-| `/setup-auto` | Create and configure channels/roles/categories automatically |
-| `/backup` | Create a database backup on demand (auto-backup runs daily) |
-| `/cleanupdb` | Remove database entries confirmed to point at deleted channels/roles/guilds |
-| `/logstatus` | Show which log events are currently enabled |
-| `/help` | Show all available commands |
+Verification:
 
-### Moderation
-| Command | Description |
-| --- | --- |
-| `/mute` `/unmute` | Timeout or un-timeout a member |
-| `/kick` `/ban` `/unban` | Remove or restore members |
-| `/clear` | Purge up to 100 messages |
-| `/cases` | View recent moderation cases |
-| `/lockdown start` `/lockdown end` `/lockdown defaults` | Lock or unlock channels (with configurable defaults) |
+- `/sendverifypanel` — post the verification panel
+- `/verifyuser` — manually verify a member
+- `/verificationstats` — pass/fail stats
 
-### Tickets
-| Command | Description |
-| --- | --- |
-| `/sendticketpanel` | Post the ticket panel |
-| `/closeticket` | Close a ticket (with reason modal or command) |
-| `/ticketadd` `/ticketremove` | Add or remove a user from a ticket |
-| `/ticketblacklist` | Manage the ticket blacklist |
-| `/ticketstats` | Ticket statistics + claim leaderboard |
+Voice channels:
 
-### Verification
-| Command | Description |
-| --- | --- |
-| `/sendverifypanel` | Post the verification panel |
-| `/verifyuser` | Manually verify a member |
-| `/verificationstats` | Pass/fail statistics |
+- `/voicehub` — create a hub or turn an existing voice channel into one
+- `/voicehubremove` `/voicehubs` `/voicecleanup` — manage hubs and temp channels
 
-### Voice Channels
-| Command | Description |
-| --- | --- |
-| `/voicehub [channel] [name]` | Create a hub, or turn an existing voice channel into one |
-| `/voicehubremove` | Remove hub status from a channel |
-| `/voicehubs` | List all hubs |
-| `/voicecleanup` | Delete all empty temp channels |
+Fun:
 
-### Fun
-| Command | Description |
-| --- | --- |
-| `/hello` `/ping` `/math` | Basics |
-| `/dadjoke` `/advice` `/meme` `/cat` `/dog` `/eightball` `/roll` `/howgay` | Random fun |
-| `/avatar` `/serverinfo` `/announce` | Info & utility |
+- `/hello` `/ping` `/math` `/dadjoke` `/advice` `/meme` `/cat` `/dog` `/eightball` `/roll` `/howgay` `/avatar` `/serverinfo` `/announce`
 
-> [!NOTE]
-> Older versions had `/set`, `/automod`, `/verification`, and `/logsettings` as separate commands. Those are all panels inside `/setup` now — one front door, everything in one place.
+Older versions had `/set`, `/automod`, `/verification`, and `/logsettings` as separate commands — those are all panels inside `/setup` now.
 
----
+## Tickets and transcripts
 
-## 🔧 Troubleshooting
+When a ticket closes, the transcripts channel and the person who opened the ticket each receive two messages:
 
-**Installation issues:**
+1. An embed with the ticket info — who opened it, who claimed it, who closed it, the reason, creation time, and message count.
+2. A `transcript-<channel>.txt` file with the raw message log, one message per line.
 
-```bash
-# If pip fails, try:
-python -m pip install -r requirements.txt --upgrade
+## Troubleshooting
 
-# Make sure pip is up to date:
-python -m pip install --upgrade pip
-```
+- **`TOKEN not found`** — `.env` must be next to `main.py` (or mounted to `/app/.env` in Docker) and contain `TOKEN=...`.
+- **Bot doesn't respond to commands** — wait a minute for the command sync, or re-invite with the `applications.commands` scope.
+- **Settings disappear after a rebuild (Docker)** — the volume must target `/app/bot_data.db`; see the Docker section.
+- **`unable to open database file`** — Docker created a folder named `bot_data.db`; remove it and `touch bot_data.db`.
+- **Verification role not assigned** — the bot's highest role must be above the verified role in Server Settings → Roles.
+- **Logs not arriving** — open `/setup`; if the log channel shows as missing, re-set it in Server Settings and check the channel permissions.
+- **"You need the Manage Server permission"** — panel buttons check permissions when clicked; admins should use the panels or grant Manage Server.
+- **Deleted message shows "not in cache"** — the message was older than the bot's cache window. The delete is still logged, but the content is unrecoverable.
 
-**Common runtime issues:**
+## Bug reports
 
-| Problem | Fix |
-| --- | --- |
-| `TOKEN not found` | Make sure your `.env` file is next to `main.py` (or mounted to `/app/.env` in Docker) and contains `TOKEN=...` |
-| Bot doesn't respond to slash commands | Wait a minute for commands to sync, or re-invite the bot with the `applications.commands` scope |
-| Settings disappear after a rebuild (Docker) | Your volume mount must target `/app/bot_data.db` — see [Running with Docker](#-running-with-docker) |
-| `unable to open database file` (Docker) | Docker created a *folder* named `bot_data.db`; `rm -rf` it and `touch bot_data.db` |
-| Role not assigned on verification | The bot's highest role must be **above** the Verified role in Server Settings → Roles |
-| Log embeds never arrive | Run `/setup` — if the log channel shows ⚠️ or ❌, re-set it in Server Settings and check the channel permissions |
-| Deleted message shows "not in cache" | The message was older than the bot's cache window — content is unrecoverable, but the delete is still logged |
-| A panel button shows "❌ You need the Manage Server permission" | That's the click-time permission check — server admins can grant Manage Server, or use the panels themselves |
+Found a bug? Message `duziy` on Discord or open an issue on GitHub. Fixes can take a while to roll out.
 
----
+## To do
 
-## 🐛 Bug Reports
+- Music integration (Spotify/YouTube playback)
 
-If you find a bug, let me know via Discord (`@duziy`) or open an issue on GitHub. Please note that updates aren't frequent, so a fix might take some time to roll out!
-
----
-
-## 📋 To-Do List
-
-- [x] **Refactor to Cogs** — Converted the entire codebase over to Cogs for cleaner structure and organization.
-- [x] **Unified Setup Hub** — One `/setup` front door: status board, Auto-Mod/Verification/Log Settings/Server Settings panels, Quick Setup, and ⬅️ Back navigation everywhere.
-- [x] **Ticket System** — Support panel with categories, claiming + leaderboard, close-reason modal, HTML transcripts, blacklist, inactivity auto-close.
-- [x] **Full Audit Logging** — Messages, channels, roles, bans/timeouts, invites, member changes — all toggleable.
-- [x] **Auto-Moderation** — Words, invites, links, caps, mentions, spam, staff bypass, per-channel exemptions.
-- [x] **Verification System** — Captcha or one-click, with logging, stats, and manual verification.
-- [x] **Lockdown Command** — Configurable default channels, current-channel fallback, permission restoration.
-- [x] **Temporary Voice Channels** — VoiceMaster-style hubs with control panels (lock, limit, rename, invite, kick).
-- [x] **Database Maintenance** — API-confirmed stale cleanup, self-healing config rows, daily rolling backups, per-guild startup summary.
-- [ ] **Music Integration** — Add support for Spotify and YouTube playback.
-
----
-
-<div align="center">
-
-Made with ❤️ by **duziy**
-
-</div>
+Made by **duziy**
