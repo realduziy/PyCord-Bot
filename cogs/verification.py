@@ -130,7 +130,7 @@ async def _finish_success(interaction: discord.Interaction, member: discord.Memb
     _failed_attempts.pop(member.id, None)
     title = "\u2705 Manually Verified" if manual_by else "\u2705 Verification Passed"
     detail = f"Verified by {manual_by} (`{manual_by.id}`)" if manual_by else None
-    await log_event(interaction.guild, "verification", _verification_log(
+    await log_event(interaction.guild, "verify_pass", _verification_log(
         interaction.guild, title, 0x57f287 if not manual_by else 0x5865f2, member, detail))
 
 
@@ -145,7 +145,7 @@ async def _finish_failure(guild: discord.Guild, member: discord.Member,
                    "or failing the check repeatedly.")
     else:
         detail += f"Consecutive failures: **{fails}**"
-    await log_event(guild, "verification", _verification_log(
+    await log_event(guild, "verify_fail", _verification_log(
         guild, "\u274c Verification Failed", 0xed4245, member, detail.strip()))
     return fails
 

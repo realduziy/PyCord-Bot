@@ -13,6 +13,7 @@ from discord.ui import Button, Modal, Select, TextInput, View
 from cog_utils import (
     TicketConfig,
     ensure_guild_config,
+    get_log_ignored,
     set_guild_setting,
 )
 from ui_common import (
@@ -343,6 +344,10 @@ async def build_setup_hub_embed(guild: discord.Guild) -> discord.Embed:
                     inline=True)
     embed.add_field(name="Join channel", value=_status(guild, cfg.join_channel), inline=True)
     embed.add_field(name="Leave channel", value=_status(guild, cfg.leave_channel), inline=True)
+    ignored = await get_log_ignored(str(guild.id))
+    embed.add_field(name="Ignored channels",
+                    value=f"{len(ignored)} excluded from logging" if ignored else "None",
+                    inline=True)
     embed.add_field(name="Join message", value=truncate(cfg.join_message), inline=False)
     embed.add_field(name="Leave message", value=truncate(cfg.leave_message), inline=False)
     embed.add_field(
@@ -434,12 +439,19 @@ class SetupHubView(View):
                        emoji=EMOJI["logs"], custom_id="hub_logs_btn", row=0)
     async def log_panel(self, interaction: discord.Interaction, button: Button):
         from cogs.logging import LogPanelView, _status_embed
+        from cog_utils import get_log_ignored
         if not interaction.user.guild_permissions.manage_guild:
             await deny(interaction)
             return
+        # pre-select the channels currently excluded from logging
+        ignored = await get_log_ignored(str(interaction.guild.id))
+        ignored_channels = [c for i in ignored
+                            if (c := interaction.guild.get_channel(int(i))) is not None]
+        cfg = await TicketConfig.fetch(str(interaction.guild.id))
         await interaction.response.send_message(
-            embed=await _status_embed(str(interaction.guild.id)),
-            view=LogPanelView(), ephemeral=True)
+            embed=await _status_embed(interaction.guild),
+            view=LogPanelView(ignored_channels, debug_enabled=cfg.log_debug),
+            ephemeral=True)
 
     @discord.ui.button(label="Server Settings", style=discord.ButtonStyle.primary,
                        emoji="\U0001f6e0\ufe0f", custom_id="hub_settings_btn", row=0)

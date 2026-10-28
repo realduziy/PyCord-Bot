@@ -79,7 +79,7 @@ Two things to watch out for:
 2. Run `/setup` and click **Quick Setup** (or run `/setup-auto`). It creates and wires up the log channel, transcripts channel, verify channel, support and verified roles, ticket category, and a voice hub — skipping anything you've already set.
 3. Post the public panels with `/sendticketpanel` and `/sendverifypanel`.
 4. Adjust anything from the `/setup` panels. The **Server Settings** panel covers channels, roles, and messages; it also has an "enter manually" option if your server has more roles or channels than the dropdown can show (Discord's list caps at 25).
-5. Turn on auto-mod and verification, then open **Log Settings** in `/setup` to choose which of the 51 log events you want on. Everything the panel does is covered in the **[Audit logging](#audit-logging)** section below — per-event toggles, per-channel overrides, and full channel exclusion.
+5. Turn on auto-mod and verification, then open **Log Settings** in `/setup` to choose which of the 56 log events you want on. Everything the panel does is covered in the **[Audit logging](#audit-logging)** section below — per-event toggles, per-channel overrides, and full channel exclusion.
 
 Settings are per-server. If you set something in one server it won't appear in another — run the setup steps in each server you use.
 
@@ -142,8 +142,8 @@ Every category below is made of **individual toggles** — e.g. Channel Created,
 | Category | Events |
 |---|---|
 | Messages | Message Deleted, Message Edited, Message Purge |
-| Channels | Channel Created, Channel Updated, Channel Deleted |
-| Roles | Role Created, Role Updated, Role Deleted |
+| Channels | Channel Created, Channel Renamed, Channel Topic Changed, Channel Settings Changed (slowmode / NSFW / category), Channel Permissions Changed, Channel Deleted |
+| Roles | Role Created, Role Renamed, Role Settings Changed (color / hoist / mentionable), Role Permissions Changed, Role Deleted |
 | Threads | Thread Created, Thread Updated, Thread Deleted |
 | Users | Member Joined, Member Left, Profile Changes (name/avatar), Nickname Changes, Role Add/Remove |
 | Moderation & Punishments | Mod Commands (kick/warn/etc.), Bans, Unbans, Timeouts (incl. manual ones) |
@@ -173,7 +173,7 @@ Every category below is made of **individual toggles** — e.g. Channel Created,
 
 Three layers, checked in order for every event:
 
-1. **Event toggle** — each of the 51 individual events can be on or off (missing row = on).
+1. **Event toggle** — each of the 56 individual events can be on or off (missing row = on).
 2. **Channel override** — specific events silenced in a channel stop logging *there only*, even if they're on globally.
 3. **Ignored channel** — nothing is logged in that channel at all (structural events like channel/role created-or-deleted still log).
 

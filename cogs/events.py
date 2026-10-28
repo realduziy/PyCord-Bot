@@ -127,7 +127,7 @@ class Events(commands.Cog):
                 except (discord.Forbidden, discord.HTTPException):
                     pass
         # Also log the join to the log channel (toggleable via /logsettings)
-        await log_event(member.guild, "members", _member_embed(
+        await log_event(member.guild, "member_join", _member_embed(
             "\U0001f7e2 Member Joined", "success", member))
 
     @commands.Cog.listener()
@@ -141,7 +141,7 @@ class Events(commands.Cog):
                     await channel.send(msg)
                 except (discord.Forbidden, discord.HTTPException):
                     pass
-        await log_event(member.guild, "members", _member_embed(
+        await log_event(member.guild, "member_leave", _member_embed(
             "\U0001f534 Member Left", "danger", member))
 
     # --- Setup ---

@@ -421,7 +421,7 @@ class AutoMod(commands.Cog):
         embed.add_field(name="Content", value=truncate(message.content), inline=False)
         embed.set_footer(text=f"Message deleted in #{message.channel}")
         embed.timestamp = datetime.datetime.now(datetime.timezone.utc)
-        await log_event(message.guild, "automod", embed)
+        await log_event(message.guild, "automod_action", embed)
 
 
 async def setup(bot):

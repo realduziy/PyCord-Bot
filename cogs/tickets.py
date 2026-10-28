@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import html as html_module
 import io
 from typing import Optional
 
@@ -72,81 +73,58 @@ def ticket_log_embed(title: str, color: int) -> discord.Embed:
     return embed
 
 
-TRANSCRIPT_MESSAGE_LIMIT = 250  # messages included in the Discord-native transcript
-
-
-async def collect_transcript_messages(channel: discord.TextChannel) -> tuple[list[dict], bool]:
-    """Gather a ticket's messages as compact dicts for the transcript embeds."""
-    messages: list[dict] = []
-    truncated = False
+async def build_transcript(channel: discord.TextChannel, ticket_info: aiosqlite.Row,
+                           reason: str, closer: str) -> str:
+    """Build a styled HTML transcript of the ticket."""
+    rows = []
     async for message in channel.history(limit=None, oldest_first=True):
         if message.author == channel.guild.me:
             continue
-        if len(messages) >= TRANSCRIPT_MESSAGE_LIMIT:
-            truncated = True
-            break
         content = message.content or ""
         if message.attachments:
             content = (content + " " if content else "") + " ".join(a.url for a in message.attachments)
-        if message.embeds and not content:
-            content = f"*[embed: {message.embeds[0].title or 'no title'}]*"
         if not content:
-            content = "*[no text content]*"
-        messages.append({
-            "time": message.created_at.strftime("%Y-%m-%d %H:%M"),
-            "author": str(message.author),
-            "text": content,
-        })
-    return messages, truncated
+            content = "[No Text Content]"
+        rows.append(
+            f'<div class="msg"><span class="time">[{message.created_at.strftime("%Y-%m-%d %H:%M")}]</span> '
+            f'<span class="author">{html_module.escape(str(message.author))}</span>: '
+            f'{html_module.escape(content)}</div>'
+        )
 
-
-def build_transcript_embeds(channel: discord.TextChannel, ticket_info: aiosqlite.Row,
-                            reason: str, closer: str,
-                            collected: tuple[list[dict], bool]) -> list[discord.Embed]:
-    """Render a ticket as native Discord embeds.
-
-    Deliberately NOT an HTML file: Discord previews HTML attachments as raw
-    source text. Embeds look right in the client with zero downloads.
-    """
-    messages, truncated = collected
-    embeds: list[discord.Embed] = []
-
-    header = discord.Embed(
-        title=f"\U0001f3ab Ticket Transcript — #{channel.name}",
-        color=0x5865f2,
-    )
-    claimed = f"<@{ticket_info['claimed_by']}>" if ticket_info["claimed_by"] else "Unclaimed"
-    header.add_field(name="Opened by",
-                     value=f"{ticket_info['user_name']} (<@{ticket_info['user_id']}>)",
-                     inline=True)
-    header.add_field(name="Claimed by", value=claimed, inline=True)
-    header.add_field(name="Closed by", value=str(closer)[:1024], inline=True)
-    header.add_field(name="Reason", value=str(reason)[:1024], inline=True)
-    header.add_field(name="Created",
-                     value=str(ticket_info["created_at"])[:19], inline=True)
-    header.add_field(name="Messages", value=str(len(messages)) +
-                     (f" (⚠️ capped at {TRANSCRIPT_MESSAGE_LIMIT})" if truncated else ""),
-                     inline=True)
-    embeds.append(header)
-    return embeds
-
-
-def build_transcript_text(collected: tuple[list[dict], bool]) -> str:
-    """Just the raw message lines for the .txt attachment — no metadata."""
-    messages, _ = collected
-    return "\n".join(f"[{msg['time']}] {msg['author']}: {msg['text']}"
-                     for msg in messages)
-
-
-def make_transcript_file(channel: discord.TextChannel, text: str) -> discord.File:
-    """Fresh File object per send — a discord.File is consumed by one send."""
-    return discord.File(io.BytesIO(text.encode("utf-8")),
-                        filename=f"transcript-{channel.name}.txt")
+    claimed = f'<@{ticket_info["claimed_by"]}>' if ticket_info["claimed_by"] else "Unclaimed"
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Transcript - {html_module.escape(channel.name)}</title>
+<style>
+body {{ font-family: Arial, sans-serif; background: #1e1f22; color: #dbdee1; padding: 2rem; max-width: 900px; margin: auto; }}
+h2 {{ color: #ffffff; }}
+p.meta {{ color: #949ba4; line-height: 1.6; }}
+hr {{ border: none; border-top: 1px solid #2b2d31; margin: 1rem 0; }}
+.msg {{ padding: 4px 0; border-bottom: 1px solid #2b2d31; }}
+.time {{ color: #949ba4; font-size: 12px; }}
+.author {{ color: #5865f2; font-weight: bold; }}
+</style>
+</head>
+<body>
+<h2>Ticket: {html_module.escape(channel.name)}</h2>
+<p class="meta">
+Closed by: {html_module.escape(closer)}<br>
+Close reason: {html_module.escape(reason)}<br>
+Opened by: {html_module.escape(ticket_info["user_name"])} ({ticket_info["user_id"]})<br>
+Claimed by: {claimed}<br>
+Created: {html_module.escape(ticket_info["created_at"])}
+</p>
+<hr>
+{chr(10).join(rows)}
+</body>
+</html>"""
 
 
 async def perform_close(channel: discord.TextChannel, reason: str, closer: str,
                         interaction: discord.Interaction | None = None) -> None:
-    """Shared close flow: embed transcript -> transcripts channel + opener DM, stats, mod log, delete row + channel."""
+    """Shared close flow: transcript .html -> transcripts channel + opener DM, stats, mod log, delete row + channel."""
     guild = channel.guild
     guild_id = str(guild.id)
     _open_ticket_channels.discard(channel.id)
@@ -165,22 +143,19 @@ async def perform_close(channel: discord.TextChannel, reason: str, closer: str,
     cfg = await TicketConfig.fetch(guild_id)
     transcripts_channel = guild.get_channel(cfg.transcripts_channel) if cfg.transcripts_channel else None
 
-    collected = await collect_transcript_messages(channel)
-    transcript_embeds = build_transcript_embeds(channel, ticket_info, reason, closer, collected)
-    transcript_text = build_transcript_text(collected)
+    html_text = await build_transcript(channel, ticket_info, reason, closer)
+    filename = f"transcript-{channel.name}.html"
 
     if transcripts_channel:
         try:
-            await transcripts_channel.send(embeds=transcript_embeds)
-            await transcripts_channel.send(file=make_transcript_file(channel, transcript_text))
+            await transcripts_channel.send(file=discord.File(io.BytesIO(html_text.encode("utf-8")), filename=filename))
         except (discord.Forbidden, discord.HTTPException):
             pass
 
     try:
         opener = guild.get_member(int(ticket_info["user_id"]))
         if opener:
-            await opener.send(embeds=transcript_embeds)
-            await opener.send(file=make_transcript_file(channel, transcript_text))
+            await opener.send(file=discord.File(io.BytesIO(html_text.encode("utf-8")), filename=filename))
     except (discord.Forbidden, discord.NotFound, ValueError):
         pass
 
@@ -194,7 +169,7 @@ async def perform_close(channel: discord.TextChannel, reason: str, closer: str,
     log_embed.add_field(name="Closed by", value=closer, inline=True)
     log_embed.add_field(name="Reason", value=reason, inline=True)
     log_embed.add_field(name="Opened by", value=f"{ticket_info['user_name']} (<@{ticket_info['user_id']}>)", inline=True)
-    await log_event(guild, "tickets", log_embed)
+    await log_event(guild, "ticket_close", log_embed)
 
     if interaction:
         await interaction.followup.send("Ticket closed \u2014 transcript saved. Deleting channel in 3 seconds...",
@@ -333,7 +308,7 @@ class TicketCategorySelect(Select):
         open_log.add_field(name="User", value=f"{interaction.user} (<@{interaction.user.id}>)", inline=True)
         open_log.add_field(name="Category", value=title, inline=True)
         open_log.add_field(name="Channel", value=ticket_channel.mention, inline=True)
-        await log_event(guild, "tickets", open_log)
+        await log_event(guild, "ticket_open", open_log)
 
         if support_role:
             try:
@@ -432,7 +407,7 @@ class TicketControlsView(View):
         claim_log = ticket_log_embed("\u270b Ticket Claimed", 0x5865f2)
         claim_log.add_field(name="Channel", value=channel.name, inline=True)
         claim_log.add_field(name="Claimed by", value=f"{interaction.user} (<@{interaction.user.id}>)", inline=True)
-        await log_event(guild, "tickets", claim_log)
+        await log_event(guild, "ticket_claim", claim_log)
 
     @discord.ui.button(label="Request Close", style=discord.ButtonStyle.secondary,
                        emoji="\U0001f64b\u200d\u2642\ufe0f", custom_id="request_close_btn")

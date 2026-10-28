@@ -54,7 +54,7 @@ async def fetch_json(url, headers=None):
 COLUMNS = {
     "join_channel", "leave_channel", "join_message", "leave_message",
     "log_channel", "ticket_panel_channel", "transcripts_channel",
-    "ticket_support_role", "ticket_category",
+    "ticket_support_role", "ticket_category", "log_debug",
     # verification
     "verified_role", "verify_channel", "verification_enabled", "verify_mode",
     # auto-moderation
@@ -92,6 +92,7 @@ async def init_db():
             "leave_message TEXT DEFAULT '{user} has left the server', "
             "log_channel INTEGER, ticket_panel_channel INTEGER, transcripts_channel INTEGER, "
             "ticket_support_role INTEGER, ticket_category INTEGER, "
+            "log_debug INTEGER DEFAULT 0, "
             # verification system
             "verified_role INTEGER, verify_channel INTEGER, verification_enabled INTEGER DEFAULT 0, "
             "verify_mode TEXT DEFAULT 'captcha', "
@@ -109,6 +110,7 @@ async def init_db():
         # Ensure columns exist if upgrading an older database
         await _ensure_columns(db, "tickets", {"claimed_by": "TEXT"})
         await _ensure_columns(db, "guild_settings", {
+            "log_debug": "INTEGER DEFAULT 0",
             "verified_role": "INTEGER", "verify_channel": "INTEGER",
             "verification_enabled": "INTEGER DEFAULT 0",
             "verify_mode": "TEXT DEFAULT 'captcha'",
@@ -152,6 +154,29 @@ async def init_db():
             "guild_id TEXT, event TEXT, enabled INTEGER DEFAULT 1, "
             "PRIMARY KEY (guild_id, event))"
         )
+        await db.execute(  # channels excluded from logging (per guild)
+            "CREATE TABLE IF NOT EXISTS log_ignored_channels ("
+            "guild_id TEXT, channel_id TEXT, "
+            "PRIMARY KEY (guild_id, channel_id))"
+        )
+        await db.execute(  # per-channel event suppressions
+            # ("in #general, log everything EXCEPT message edits" — one row per
+            # sub-event silenced in that channel)
+            "CREATE TABLE IF NOT EXISTS log_channel_overrides ("
+            "guild_id TEXT, channel_id TEXT, event TEXT, "
+            "PRIMARY KEY (guild_id, channel_id, event))"
+        )
+        # upgrade older category-level tables to the per-event layout
+        try:
+            await db.execute(
+                "ALTER TABLE log_channel_overrides RENAME COLUMN category TO event")
+        except aiosqlite.OperationalError:
+            pass  # fresh table or already migrated
+        # drop any values that aren't real event keys (e.g. old category rows)
+        known = ", ".join("?" * len(LOG_EVENT_CATEGORY))
+        await db.execute(
+            f"DELETE FROM log_channel_overrides WHERE event NOT IN ({known})",
+            list(LOG_EVENT_CATEGORY))
         await db.execute(  # verification attempts (success/failure tracking)
             "CREATE TABLE IF NOT EXISTS verification_attempts ("
             "guild_id TEXT, user_id TEXT, result TEXT, attempts INTEGER DEFAULT 1, "
@@ -183,20 +208,110 @@ async def _ensure_columns(db, table: str, columns: dict):
             await db.execute(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")
 
 
-# --- Event names used by the customizable logging system ---
-LOG_EVENTS = {
-    "mod": "Moderation & Punishments",
-    "automod": "Auto-Moderation",
-    "tickets": "Tickets",
-    "verification": "Verification",
-    "members": "Joins / Leaves / Profile",
-    "channels": "Channel Created / Edited / Deleted",
-    "roles": "Role Created / Edited / Deleted",
-    "messages": "Message Edits / Deletes",
-    "server": "Invites & Server Changes",
-    "lockdown": "Lockdowns",
-    "voice": "Voice Channels",
+# --- Event catalog for the customizable logging system ---
+# Category -> (display name, {sub-event key: label}). Every sub-event is its
+# own on/off toggle; channel overrides (below) work at category level.
+LOG_CATEGORIES = {
+    "mod": ("Moderation & Punishments", {
+        "mod_action": "Mod Commands (kick / warn / etc.)",
+        "mod_ban": "Bans",
+        "mod_unban": "Unbans",
+        "mod_timeout": "Timeouts",
+    }),
+    "automod": ("Discord AutoMod", {
+        "automod_action": "AutoMod Actions",
+    }),
+    "tickets": ("Tickets", {
+        "ticket_open": "Ticket Opened",
+        "ticket_close": "Ticket Closed",
+        "ticket_claim": "Ticket Claimed",
+    }),
+    "verification": ("Verification", {
+        "verify_pass": "Verification Passed",
+        "verify_fail": "Verification Failed",
+    }),
+    "members": ("Users", {
+        "member_join": "Member Joined",
+        "member_leave": "Member Left",
+        "member_profile": "Profile Changes (name / avatar)",
+        "member_nick": "Nickname Changes",
+        "member_roles": "Role Add / Remove",
+    }),
+    "channels": ("Channels", {
+        "channel_create": "Channel Created",
+        "channel_delete": "Channel Deleted",
+        "channel_rename": "Channel Renamed",
+        "channel_topic": "Channel Topic Changed",
+        "channel_settings": "Channel Settings Changed (slowmode / NSFW / category)",
+        "channel_perms": "Channel Permissions Changed",
+    }),
+    "roles": ("Roles", {
+        "role_create": "Role Created",
+        "role_delete": "Role Deleted",
+        "role_rename": "Role Renamed",
+        "role_settings": "Role Settings Changed (color / hoist / mentionable)",
+        "role_perms": "Role Permissions Changed",
+    }),
+    "messages": ("Messages", {
+        "message_delete": "Message Deleted",
+        "message_edit": "Message Edited",
+        "message_purge": "Message Purge",
+    }),
+    "threads": ("Threads", {
+        "thread_create": "Thread Created",
+        "thread_update": "Thread Updated",
+        "thread_delete": "Thread Deleted",
+    }),
+    "server": ("Server", {
+        "invite_create": "Invite Created",
+        "invite_delete": "Invite Deleted",
+        "server_update": "Server Settings Changed",
+    }),
+    "events": ("Events (Scheduled)", {
+        "event_create": "Event Created",
+        "event_update": "Event Updated",
+        "event_delete": "Event Deleted",
+    }),
+    "stage": ("Stage", {
+        "stage_create": "Stage Started",
+        "stage_update": "Stage Updated",
+        "stage_delete": "Stage Ended",
+    }),
+    "voice": ("Voice", {
+        "voice_join": "Voice Join",
+        "voice_leave": "Voice Leave",
+        "voice_move": "Voice Move",
+        "voice_temp": "Temp Channel Created",
+    }),
+    "applications": ("Applications & Webhooks", {
+        "integration_update": "Integration / Bot Changes",
+        "webhook_update": "Webhook Changes",
+    }),
+    "emojis": ("Emojis", {
+        "emoji_update": "Emoji Changes",
+    }),
+    "stickers": ("Stickers", {
+        "sticker_update": "Sticker Changes",
+    }),
+    "soundboard": ("Soundboard", {
+        "soundboard_create": "Sound Added",
+        "soundboard_update": "Sound Updated",
+        "soundboard_delete": "Sound Removed",
+    }),
+    "polls": ("Polls", {
+        "poll_vote_add": "Vote Added",
+        "poll_vote_remove": "Vote Removed",
+    }),
+    "lockdown": ("Lockdowns", {
+        "lockdown_start": "Lockdown Started",
+        "lockdown_end": "Lockdown Ended",
+    }),
 }
+
+# Flat lookup tables derived from the catalog
+LOG_EVENTS = {key: label for _, subs in LOG_CATEGORIES.values() for key, label in subs.items()}
+LOG_EVENT_CATEGORY = {key: cat for cat, (_, subs) in LOG_CATEGORIES.items()
+                      for key in subs}
 
 # Message IDs deleted by auto-mod, so the delete-logger doesn't double-log them.
 # Capped loosely; old IDs are dropped when the set grows too large.
@@ -237,6 +352,105 @@ async def set_log_event(guild_id: str, event: str, enabled: bool):
         await db.commit()
 
 
+# --- Console debug traces (off by default) ---
+async def is_log_debug_enabled(guild_id: str) -> bool:
+    """Whether the verbose 'DELETE/EDIT/PURGE captured' console traces run."""
+    async with aiosqlite.connect(DB_FILE) as db:
+        async with db.execute(
+            "SELECT log_debug FROM guild_settings WHERE guild_id = ?", (guild_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+    return bool(row and row[0])
+
+
+# --- Channels excluded from logging ---
+async def get_log_ignored(guild_id: str) -> list[str]:
+    """Channel IDs (as strings) whose activity is never logged for this guild."""
+    async with aiosqlite.connect(DB_FILE) as db:
+        async with db.execute(
+            "SELECT channel_id FROM log_ignored_channels WHERE guild_id = ? "
+            "ORDER BY channel_id",
+            (guild_id,),
+        ) as cursor:
+            return [row[0] for row in await cursor.fetchall()]
+
+
+async def set_log_ignored(guild_id: str, channel_id: str, ignored: bool):
+    async with aiosqlite.connect(DB_FILE) as db:
+        if ignored:
+            await db.execute(
+                "INSERT OR IGNORE INTO log_ignored_channels (guild_id, channel_id) "
+                "VALUES (?, ?)",
+                (guild_id, channel_id),
+            )
+        else:
+            await db.execute(
+                "DELETE FROM log_ignored_channels WHERE guild_id = ? AND channel_id = ?",
+                (guild_id, channel_id),
+            )
+        await db.commit()
+
+
+# --- Per-channel event overrides ---
+async def get_channel_overrides(guild_id: str, channel_id: str) -> list[str]:
+    """Sub-event keys silenced in one channel (e.g. ["message_edit"])."""
+    async with aiosqlite.connect(DB_FILE) as db:
+        async with db.execute(
+            "SELECT event FROM log_channel_overrides "
+            "WHERE guild_id = ? AND channel_id = ? ORDER BY event",
+            (guild_id, channel_id),
+        ) as cursor:
+            return [row[0] for row in await cursor.fetchall()]
+
+
+async def set_channel_category_overrides(guild_id: str, channel_id: str,
+                                         category: str, events: list[str]):
+    """Replace the silenced-event set for ONE category in one channel.
+
+    Other categories' overrides for the same channel are left untouched.
+    """
+    keys = list(LOG_CATEGORIES[category][1])
+    marks = ", ".join("?" * len(keys))
+    async with aiosqlite.connect(DB_FILE) as db:
+        await db.execute(
+            f"DELETE FROM log_channel_overrides WHERE guild_id = ? AND channel_id = ? "
+            f"AND event IN ({marks})",
+            [guild_id, channel_id, *keys],
+        )
+        await db.executemany(
+            "INSERT OR IGNORE INTO log_channel_overrides (guild_id, channel_id, event) "
+            "VALUES (?, ?, ?)",
+            [(guild_id, channel_id, event) for event in events],
+        )
+        await db.commit()
+
+
+async def is_log_event_suppressed_in(guild_id: str, event: str, channel) -> bool:
+    """True if this exact event is silenced in this channel.
+
+    Checks the channel itself plus its parent (for threads) and its category —
+    so silencing #general also silences its threads, and silencing an event for
+    a whole category silences it for all channels inside.
+    """
+    if event not in LOG_EVENT_CATEGORY:
+        return False
+    ids = [str(channel.id)]
+    parent_id = getattr(channel, "parent_id", None)
+    if parent_id:
+        ids.append(str(parent_id))
+    category_id = getattr(channel, "category_id", None)
+    if category_id:
+        ids.append(str(category_id))
+    marks = ", ".join("?" * len(ids))
+    async with aiosqlite.connect(DB_FILE) as db:
+        async with db.execute(
+            f"SELECT 1 FROM log_channel_overrides WHERE guild_id = ? AND event = ? "
+            f"AND channel_id IN ({marks}) LIMIT 1",
+            [guild_id, event, *ids],
+        ) as cursor:
+            return await cursor.fetchone() is not None
+
+
 async def ensure_guild_config(guild_id: str):
     async with aiosqlite.connect(DB_FILE) as db:
         await db.execute(
@@ -259,6 +473,8 @@ class TicketConfig:
         self.transcripts_channel = row["transcripts_channel"]
         self.ticket_support_role = row["ticket_support_role"]
         self.ticket_category = row["ticket_category"]
+        # console debug traces for message events (default: off — quiet console)
+        self.log_debug = bool(row["log_debug"])
         # verification
         self.verified_role = row["verified_role"]
         self.verify_channel = row["verify_channel"]
@@ -293,8 +509,14 @@ class TicketConfig:
 
 
 # --- Logging ---
-async def log_event(guild: discord.Guild, event: str, embed: discord.Embed) -> bool:
+async def log_event(guild: discord.Guild, event: str, embed: discord.Embed,
+                    channel: discord.abc.GuildChannel | None = None) -> bool:
     """Send an embed to the guild's log channel, respecting per-event toggles.
+
+    Pass ``channel`` when the event happened IN a channel so ignored channels
+    (and threads inside them / channels under an ignored category) are
+    skipped. Ignores only apply to activity events — structural ones (channel
+    created/deleted, etc.) are always logged.
 
     Failures are logged to the console (not silently swallowed) so a
     misconfigured log channel is easy to spot.
@@ -302,6 +524,22 @@ async def log_event(guild: discord.Guild, event: str, embed: discord.Embed) -> b
     guild_id = str(guild.id)
     if not await is_log_event_enabled(guild_id, event):
         return False
+    if channel is not None:
+        ignored = set(await get_log_ignored(guild_id))
+        if ignored:
+            relevant = {str(channel.id)}
+            # threads: also respect their parent channel / category
+            parent_id = getattr(channel, "parent_id", None)
+            if parent_id:
+                relevant.add(str(parent_id))
+            category_id = getattr(channel, "category_id", None)
+            if category_id:
+                relevant.add(str(category_id))
+            if relevant & ignored:
+                return False
+        # per-channel override: "log everything here EXCEPT category X"
+        if await is_log_event_suppressed_in(guild_id, event, channel):
+            return False
     cfg = await TicketConfig.fetch(guild_id)
     if not cfg.log_channel:
         log.warning("log_event (%s): no log channel configured for guild %s", event, guild_id)

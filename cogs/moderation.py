@@ -52,7 +52,7 @@ async def _modlog(guild, action, actor, target, reason=None, extra=None):
         embed.add_field(name="Reason", value=truncate(reason), inline=False)
     if extra:
         embed.add_field(name="Details", value=truncate(extra), inline=False)
-    await log_event(guild, "mod", embed)
+    await log_event(guild, "mod_action", embed)
     return case_id
 
 
@@ -157,7 +157,7 @@ class LockdownGroup(app_commands.Group):
         if locked:
             names = ", ".join(c.mention for c in locked)
             await interaction.response.send_message(f"\U0001f512 Locked: {names}")
-            await log_event(interaction.guild, "lockdown", _lockdown_log_embed(
+            await log_event(interaction.guild, "lockdown_start", _lockdown_log_embed(
                 "\U0001f512 Lockdown Started", 0xed4245, interaction.user, locked))
         else:
             await interaction.response.send_message(
@@ -192,7 +192,7 @@ class LockdownGroup(app_commands.Group):
         if unlocked:
             names = ", ".join(c.mention for c in unlocked)
             await interaction.response.send_message(f"\U0001f513 Unlocked: {names}")
-            await log_event(interaction.guild, "lockdown", _lockdown_log_embed(
+            await log_event(interaction.guild, "lockdown_end", _lockdown_log_embed(
                 "\U0001f513 Lockdown Ended", 0x57f287, interaction.user, unlocked))
         else:
             await interaction.response.send_message(

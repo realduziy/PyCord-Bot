@@ -397,7 +397,7 @@ class Voice(commands.Cog):
         embed.add_field(name="Channel", value=temp.name, inline=True)
         embed.add_field(name="Owner", value=f"{member} (`{member.id}`)", inline=True)
         embed.add_field(name="Hub", value=hub.name, inline=True)
-        await log_event(guild, "voice", embed)
+        await log_event(guild, "voice_temp", embed)
         return temp
 
     async def _delete_temp(self, channel: discord.VoiceChannel):
