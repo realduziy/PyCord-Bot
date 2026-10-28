@@ -8,7 +8,7 @@ A multipurpose Discord bot written in Python with [discord.py](https://github.co
 
 - **Setup hub** — everything is configured from `/setup`: auto-mod, verification, logging, channel/role settings, and a one-click quick setup that creates channels and roles for you. Every panel has a Back button.
 - **Tickets** — category-based support panel, claiming with a leaderboard, close-reason modal, HTML-free transcripts (an info embed plus a plain `.txt` log), blacklisting, and auto-close after 3 days of inactivity.
-- **Audit logging** — 51 events across 19 categories: messages (delete / edit / purge), channels and roles (created / updated / deleted as separate toggles), bans, unbans, timeouts (even manual ones), invites, server settings, threads, voice (join / leave / move / temp channels), joins / leaves / profile / nickname / role changes, scheduled events, stage, emojis, stickers, soundboard, applications & webhooks, poll votes, AutoMod, tickets, verification, and lockdowns. Every individual event toggles on or off, **Channel Overrides** silence one category in one channel while everything else keeps logging, and channels can be excluded from logging entirely. An optional 🐞 debug mode prints message-event traces to the console (off by default).
+- **Audit logging** — 51 events across 19 categories, each with its own on/off toggle, plus per-channel overrides and full channel exclusion. See **[Audit logging](#audit-logging)** below for the full reference.
 - **Auto-moderation** — blocked words (batch add/remove), Discord invites, external links, caps, mass mentions, and spam. Optional staff bypass and per-channel exemptions.
 - **Verification** — captcha or one-click, with success/failure logging, stats, and manual verify for staff.
 - **Lockdown** — lock or unlock channels instantly, with configurable default channels and automatic permission restoration.
@@ -79,11 +79,7 @@ Two things to watch out for:
 2. Run `/setup` and click **Quick Setup** (or run `/setup-auto`). It creates and wires up the log channel, transcripts channel, verify channel, support and verified roles, ticket category, and a voice hub — skipping anything you've already set.
 3. Post the public panels with `/sendticketpanel` and `/sendverifypanel`.
 4. Adjust anything from the `/setup` panels. The **Server Settings** panel covers channels, roles, and messages; it also has an "enter manually" option if your server has more roles or channels than the dropdown can show (Discord's list caps at 25).
-5. Turn on auto-mod and verification, then open **Log Settings** in `/setup`:
-   - Pick a **category** from the dropdown to toggle its individual events (e.g. Channel Created vs Channel Deleted). The overview shows ✅ all on, ⚠️ partially on, ❌ all off.
-   - **Channel Overrides** — silence a category in one channel only ("in #general, don't log Messages but log everything else"). Threads follow their parent channel; a silenced category covers every channel inside it.
-   - The channel picker excludes channels from logging **entirely**.
-   - The 🐞 button toggles verbose console debug traces (off by default).
+5. Turn on auto-mod and verification, then open **Log Settings** in `/setup` to choose which of the 51 log events you want on. Everything the panel does is covered in the **[Audit logging](#audit-logging)** section below — per-event toggles, per-channel overrides, and full channel exclusion.
 
 Settings are per-server. If you set something in one server it won't appear in another — run the setup steps in each server you use.
 
@@ -135,15 +131,59 @@ Fun:
 
 Older versions had `/set`, `/automod`, `/verification`, and `/logsettings` as separate commands — those are all panels inside `/setup` now.
 
-## How the logging toggles stack
+## Audit logging
+
+Everything the bot can log, and how to control it.
+
+### What's logged
+
+Every category below is made of **individual toggles** — e.g. Channel Created, Channel Updated, and Channel Deleted are three separate switches, not one:
+
+| Category | Events |
+|---|---|
+| Messages | Message Deleted, Message Edited, Message Purge |
+| Channels | Channel Created, Channel Updated, Channel Deleted |
+| Roles | Role Created, Role Updated, Role Deleted |
+| Threads | Thread Created, Thread Updated, Thread Deleted |
+| Users | Member Joined, Member Left, Profile Changes (name/avatar), Nickname Changes, Role Add/Remove |
+| Moderation & Punishments | Mod Commands (kick/warn/etc.), Bans, Unbans, Timeouts (incl. manual ones) |
+| Server | Invite Created, Invite Deleted, Server Settings Changed |
+| Voice | Voice Join, Voice Leave, Voice Move, Temp Channel Created |
+| Events (Scheduled) | Event Created, Event Updated, Event Deleted |
+| Stage | Stage Started, Stage Updated, Stage Ended |
+| Emojis | Emoji Changes (added/removed/renamed) |
+| Stickers | Sticker Changes |
+| Soundboard | Sound Added, Sound Updated, Sound Removed |
+| Applications & Webhooks | Integration/Bot Changes, Webhook Changes |
+| Polls | Vote Added, Vote Removed |
+| Discord AutoMod | AutoMod Actions |
+| Tickets | Ticket Opened, Ticket Closed, Ticket Claimed |
+| Verification | Verification Passed, Verification Failed |
+| Lockdowns | Lockdown Started, Lockdown Ended |
+
+### The Log Settings panel (`/setup → Log Settings`)
+
+- **Overview** — one line per category: ✅ all on · ⚠️ partially on · ❌ all off.
+- **Toggle individual events** — pick a category from the dropdown to get a menu of just that category's events, pre-set to what's on. It saves automatically; picking none turns the whole category off.
+- **🎟 Channel Overrides** — silence *specific events* in one channel while everything else keeps logging ("in #general, don't log Message Edited but keep Message Deleted"). Three steps: pick the channel → pick the event group → tick the events to silence. The panel shows everything currently silenced in that channel.
+- **Channel picker** — excludes channels from logging **entirely** (nothing logs there).
+- **🐞 Debug Console Logs** — prints "DELETE/EDIT/PURGE captured" style traces to the bot's console for troubleshooting. Off by default; only affects the console, never the Discord log channel.
+
+### How the toggles stack
 
 Three layers, checked in order for every event:
 
 1. **Event toggle** — each of the 51 individual events can be on or off (missing row = on).
-2. **Channel override** — a category silenced in a channel stops logging *there only*, even if it's on globally.
+2. **Channel override** — specific events silenced in a channel stop logging *there only*, even if they're on globally.
 3. **Ignored channel** — nothing is logged in that channel at all (structural events like channel/role created-or-deleted still log).
 
-A category turned off globally never logs anywhere, no matter what the channel settings say.
+Threads follow their parent channel, and setting an override on a **category channel** applies it to every channel inside. A category turned off globally never logs anywhere, no matter what the channel settings say.
+
+### Quick commands
+
+- `/logstatus` — overview embed (✅ / ⚠️ / ❌) with ignored channels
+- `/logcategory <category> <on/off>` — flip a whole category at once
+- `/logignore add|remove|list` — manage fully-ignored channels
 
 ## Tickets and transcripts
 
