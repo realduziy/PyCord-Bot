@@ -8,7 +8,7 @@ A multipurpose Discord bot written in Python with [discord.py](https://github.co
 
 - **Setup hub** — everything is configured from `/setup`: auto-mod, verification, logging, channel/role settings, and a one-click quick setup that creates channels and roles for you. Every panel has a Back button.
 - **Tickets** — category-based support panel, claiming with a leaderboard, close-reason modal, HTML-free transcripts (an info embed plus a plain `.txt` log), blacklisting, and auto-close after 3 days of inactivity.
-- **Audit logging** — message deletes/edits, channel and role changes, bans and timeouts (even manual ones), invites, nickname and role changes, joins/leaves. Each category can be toggled on or off.
+- **Audit logging** — 51 events across 19 categories: messages (delete / edit / purge), channels and roles (created / updated / deleted as separate toggles), bans, unbans, timeouts (even manual ones), invites, server settings, threads, voice (join / leave / move / temp channels), joins / leaves / profile / nickname / role changes, scheduled events, stage, emojis, stickers, soundboard, applications & webhooks, poll votes, AutoMod, tickets, verification, and lockdowns. Every individual event toggles on or off, **Channel Overrides** silence one category in one channel while everything else keeps logging, and channels can be excluded from logging entirely. An optional 🐞 debug mode prints message-event traces to the console (off by default).
 - **Auto-moderation** — blocked words (batch add/remove), Discord invites, external links, caps, mass mentions, and spam. Optional staff bypass and per-channel exemptions.
 - **Verification** — captcha or one-click, with success/failure logging, stats, and manual verify for staff.
 - **Lockdown** — lock or unlock channels instantly, with configurable default channels and automatic permission restoration.
@@ -20,6 +20,7 @@ A multipurpose Discord bot written in Python with [discord.py](https://github.co
 
 - Python 3.10 or newer (developed on 3.15)
 - A bot token from the [Discord Developer Portal](https://discord.com/developers/applications)
+- **discord.py 2.5 or newer** (poll-vote and soundboard logging need it — the pinned `requirements.txt` has no version cap, so a fresh install gets a compatible version)
 
 ## Setup
 
@@ -78,7 +79,11 @@ Two things to watch out for:
 2. Run `/setup` and click **Quick Setup** (or run `/setup-auto`). It creates and wires up the log channel, transcripts channel, verify channel, support and verified roles, ticket category, and a voice hub — skipping anything you've already set.
 3. Post the public panels with `/sendticketpanel` and `/sendverifypanel`.
 4. Adjust anything from the `/setup` panels. The **Server Settings** panel covers channels, roles, and messages; it also has an "enter manually" option if your server has more roles or channels than the dropdown can show (Discord's list caps at 25).
-5. Turn on auto-mod, verification, and pick which log categories you want from their panels.
+5. Turn on auto-mod and verification, then open **Log Settings** in `/setup`:
+   - Pick a **category** from the dropdown to toggle its individual events (e.g. Channel Created vs Channel Deleted). The overview shows ✅ all on, ⚠️ partially on, ❌ all off.
+   - **Channel Overrides** — silence a category in one channel only ("in #general, don't log Messages but log everything else"). Threads follow their parent channel; a silenced category covers every channel inside it.
+   - The channel picker excludes channels from logging **entirely**.
+   - The 🐞 button toggles verbose console debug traces (off by default).
 
 Settings are per-server. If you set something in one server it won't appear in another — run the setup steps in each server you use.
 
@@ -90,7 +95,9 @@ Setup and utilities:
 
 - `/setup` — configuration hub (all settings panels live here)
 - `/setup-auto` — create and configure channels/roles/categories automatically
-- `/logstatus` — show which log events are enabled
+- `/logstatus` — show which log categories are enabled (✅ / ⚠️ / ❌)
+- `/logcategory` — enable or disable a whole log category at once
+- `/logignore add` `/logignore remove` `/logignore list` — exclude channels from logging entirely
 - `/backup` — database backup on demand
 - `/cleanupdb` — remove database entries confirmed to point at deleted things
 - `/help` — command list
@@ -128,6 +135,16 @@ Fun:
 
 Older versions had `/set`, `/automod`, `/verification`, and `/logsettings` as separate commands — those are all panels inside `/setup` now.
 
+## How the logging toggles stack
+
+Three layers, checked in order for every event:
+
+1. **Event toggle** — each of the 51 individual events can be on or off (missing row = on).
+2. **Channel override** — a category silenced in a channel stops logging *there only*, even if it's on globally.
+3. **Ignored channel** — nothing is logged in that channel at all (structural events like channel/role created-or-deleted still log).
+
+A category turned off globally never logs anywhere, no matter what the channel settings say.
+
 ## Tickets and transcripts
 
 When a ticket closes, the transcripts channel and the person who opened the ticket each receive two messages:
@@ -142,7 +159,8 @@ When a ticket closes, the transcripts channel and the person who opened the tick
 - **Settings disappear after a rebuild (Docker)** — the volume must target `/app/bot_data.db`; see the Docker section.
 - **`unable to open database file`** — Docker created a folder named `bot_data.db`; remove it and `touch bot_data.db`.
 - **Verification role not assigned** — the bot's highest role must be above the verified role in Server Settings → Roles.
-- **Logs not arriving** — open `/setup`; if the log channel shows as missing, re-set it in Server Settings and check the channel permissions.
+- **Logs not arriving** — open `/setup`; if the log channel shows as missing, re-set it in Server Settings and check the channel permissions. Also check the event is toggled on in **Log Settings** and the channel isn't ignored or overridden.
+- **Console spammed with "DELETE captured" / "EDIT captured" lines** — those are debug traces. They're off by default; toggle them with the 🐞 button in the **Log Settings** panel.
 - **"You need the Manage Server permission"** — panel buttons check permissions when clicked; admins should use the panels or grant Manage Server.
 - **Deleted message shows "not in cache"** — the message was older than the bot's cache window. The delete is still logged, but the content is unrecoverable.
 
