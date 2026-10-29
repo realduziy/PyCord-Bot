@@ -14,6 +14,7 @@ A multipurpose Discord bot written in Python with [discord.py](https://github.co
 - **Lockdown** — lock or unlock channels instantly, with configurable default channels and automatic permission restoration.
 - **Temporary voice channels** — join a hub to get your own channel with a control panel (lock, limit, rename, invite, kick). Empty channels clean themselves up.
 - **Moderation** — mute/unmute, kick, ban/unban, purge, and a persistent mod-case history.
+- **Reaction roles** — button or dropdown role menus, emoji-reaction bindings, and a guided wizard. Build a whole menu in one flow, then edit or delete it anytime from a live panel. See **[Reaction roles](#reaction-roles)** below.
 - **Self-maintaining database** — config rows create themselves, stale entries are only removed after Discord confirms they're really gone, and a rolling daily backup is kept.
 
 ## Requirements
@@ -125,6 +126,15 @@ Voice channels:
 - `/voicehub` — create a hub or turn an existing voice channel into one
 - `/voicehubremove` `/voicehubs` `/voicecleanup` — manage hubs and temp channels
 
+Reaction roles:
+
+- `/reactionrole wizard` — guided setup: name/description → style & mode → click roles to add them → pick a channel → posted. Nothing is saved until you post.
+- `/reactionrole manage` — full edit panel for an existing menu: add/remove/edit roles, rename, switch style/mode, post/move to another channel, or delete (with confirmation). Every change saves instantly and updates the live menu.
+- `/reactionrole list` — all menus with style, mode, and posted status
+- `/reactionrole create` `/reactionrole add` `/reactionrole remove` `/reactionrole post` `/reactionrole delete` — manual equivalents of the wizard steps, if you prefer scripting it
+- `/reactionrole bind` `/reactionrole unbind` `/reactionrole bindings` — bind an emoji reaction on any message to a role (classic add-by-reacting flow)
+- Right-click any message → **Apps → Bind Reaction Role** — the fastest way to attach a reaction role; just type the role and emoji
+
 Fun:
 
 - `/hello` `/ping` `/math` `/dadjoke` `/advice` `/meme` `/cat` `/dog` `/eightball` `/roll` `/howgay` `/avatar` `/serverinfo` `/announce`
@@ -192,6 +202,39 @@ When a ticket closes, the transcripts channel and the person who opened the tick
 1. An embed with the ticket info — who opened it, who claimed it, who closed it, the reason, creation time, and message count.
 2. A `transcript-<channel>.txt` file with the raw message log, one message per line.
 
+## Reaction roles
+
+Two ways to hand out roles, both fully managed from Discord:
+
+### Button/dropdown menus (recommended)
+
+`/reactionrole wizard` walks you through the whole setup in one flow:
+
+1. **Name & description** — shown at the top of the menu embed.
+2. **Look & behavior** — buttons (one per role) or a dropdown; *toggle* lets members stack roles, *exclusive* swaps the previously picked role for the new one.
+3. **Roles** — pick roles from a dropdown and they're added instantly (role name is used as the label). Optionally use **✏️ Edit an entry** to give a role a custom emoji, label, or description.
+4. **Preview & post** — see the exact embed the menu will use, pick a channel, and post.
+
+Once a menu exists, `/reactionrole manage <name>` opens a live control panel for it:
+
+- **Add / remove / edit roles** — changes save instantly and refresh the posted message.
+- **Rename, rewrite the description, switch style or mode** — same live update.
+- **Post/Move** — post an unposted menu anywhere, or move a posted one (the old message is deleted).
+- **Delete** — asks for confirmation, then removes the menu and its message.
+
+Menus survive restarts (the views are re-registered from the database on startup), so members can keep clicking them forever.
+
+### Emoji reactions on any message
+
+For the classic "react with 🎮 to get the Gaming role" flow:
+
+- Right-click a message → **Apps → Bind Reaction Role** → type the role and emoji, or
+- `/reactionrole bind channel:#roles message_id:… role:@Gaming emoji:🎮`
+
+Reactions the bot adds itself toggle the role on add and remove it on remove. Manage existing bindings with `/reactionrole bindings` and `/reactionrole unbind`.
+
+The bot's highest role must sit **above** every role it hands out, in Server Settings → Roles, and it needs **Manage Roles**.
+
 ## Troubleshooting
 
 - **`TOKEN not found`** — `.env` must be next to `main.py` (or mounted to `/app/.env` in Docker) and contain `TOKEN=...`.
@@ -199,6 +242,8 @@ When a ticket closes, the transcripts channel and the person who opened the tick
 - **Settings disappear after a rebuild (Docker)** — the volume must target `/app/bot_data.db`; see the Docker section.
 - **`unable to open database file`** — Docker created a folder named `bot_data.db`; remove it and `touch bot_data.db`.
 - **Verification role not assigned** — the bot's highest role must be above the verified role in Server Settings → Roles.
+- **Reaction-role buttons do nothing** — same cause: the bot's role must be above the roles it assigns, and it needs Manage Roles. For emoji bindings, also check the message is in a channel the bot can read.
+- **A menu edit didn't update the posted message** — the original message may have been deleted; use **Post/Move** in `/reactionrole manage` to publish a fresh copy.
 - **Logs not arriving** — open `/setup`; if the log channel shows as missing, re-set it in Server Settings and check the channel permissions. Also check the event is toggled on in **Log Settings** and the channel isn't ignored or overridden.
 - **Console spammed with "DELETE captured" / "EDIT captured" lines** — those are debug traces. They're off by default; toggle them with the 🐞 button in the **Log Settings** panel.
 - **"You need the Manage Server permission"** — panel buttons check permissions when clicked; admins should use the panels or grant Manage Server.
