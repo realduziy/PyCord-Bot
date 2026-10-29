@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import io
 import random
@@ -28,15 +29,33 @@ from ui_common import (
 from cogs._hub import BackToHubButton
 
 CAPTCHA_TTL = 300  # seconds before a captcha code expires
+FAILED_ATTEMPT_TTL = 15 * 60  # reset consecutive failures after 15 minutes
 CAPTCHA_LENGTH = 5
 MODE_LABELS = {"captcha": "\U0001f9e9 Captcha", "click": "\U0001f446 One-click"}
 
-# user_id -> (code, expiry_timestamp); codes are single-use
-_captcha_codes: dict[int, tuple[str, float]] = {}
+# (guild_id, user_id) -> (code, expiry_timestamp); codes are single-use.
+# Guild ID is part of the key so verification in one server never overwrites
+# verification in another.
+_captcha_codes: dict[tuple[int, int], tuple[str, float]] = {}
 
-# Consecutive failed attempts per user before we raise a flag (in-memory)
-_failed_attempts: dict[int, int] = {}
+# (guild_id, user_id) -> (consecutive failures, expiry_timestamp)
+_failed_attempts: dict[tuple[int, int], tuple[int, float]] = {}
 MAX_FAILED_ATTEMPTS = 3
+
+
+def _captcha_key(guild_id: int, user_id: int) -> tuple[int, int]:
+    return guild_id, user_id
+
+
+def _prune_expired_state(now: float | None = None) -> None:
+    now = time.time() if now is None else now
+    for key, (_, expiry) in list(_captcha_codes.items()):
+        if expiry <= now:
+            _captcha_codes.pop(key, None)
+
+    for key, (_, expiry) in list(_failed_attempts.items()):
+        if expiry <= now:
+            _failed_attempts.pop(key, None)
 
 
 # --- Captcha image generation ---
@@ -86,9 +105,14 @@ def _generate_captcha() -> tuple[str, io.BytesIO]:
     return code, buffer
 
 
-def _new_captcha(user_id: int) -> io.BytesIO:
-    code, buffer = _generate_captcha()
-    _captcha_codes[user_id] = (code, time.time() + CAPTCHA_TTL)
+async def _new_captcha(guild_id: int, user_id: int) -> io.BytesIO:
+    """Generate off the event loop, then store a guild-scoped challenge."""
+    code, buffer = await asyncio.to_thread(_generate_captcha)
+    _prune_expired_state()
+    _captcha_codes[_captcha_key(guild_id, user_id)] = (
+        code,
+        time.time() + CAPTCHA_TTL,
+    )
     return buffer
 
 
@@ -127,7 +151,7 @@ async def _finish_success(interaction: discord.Interaction, member: discord.Memb
     """Shared success path: DB + log (role grant happens before this)."""
     guild_id = str(interaction.guild.id)
     await record_verification_attempt(guild_id, str(member.id), True)
-    _failed_attempts.pop(member.id, None)
+    _failed_attempts.pop(_captcha_key(interaction.guild.id, member.id), None)
     title = "\u2705 Manually Verified" if manual_by else "\u2705 Verification Passed"
     detail = f"Verified by {manual_by} (`{manual_by.id}`)" if manual_by else None
     await log_event(interaction.guild, "verify_pass", _verification_log(
@@ -137,8 +161,14 @@ async def _finish_success(interaction: discord.Interaction, member: discord.Memb
 async def _finish_failure(guild: discord.Guild, member: discord.Member,
                           detail_prefix: str = None):
     """Shared failure path: count, log, return the current consecutive-fail count."""
-    fails = _failed_attempts.get(member.id, 0) + 1
-    _failed_attempts[member.id] = fails
+    key = _captcha_key(guild.id, member.id)
+    now = time.time()
+    previous_fails, previous_expiry = _failed_attempts.get(key, (0, now))
+    if previous_expiry <= now:
+        previous_fails = 0
+
+    fails = previous_fails + 1
+    _failed_attempts[key] = (fails, now + FAILED_ATTEMPT_TTL)
     detail = detail_prefix or ""
     if fails >= MAX_FAILED_ATTEMPTS:
         detail += (f"\u26a0\ufe0f **{fails} consecutive failures** — user may be a bot "
@@ -184,7 +214,11 @@ class CaptchaCodeModal(Modal):
         member = interaction.user
         guild = interaction.guild
 
-        stored = _captcha_codes.pop(member.id, None)
+        _prune_expired_state()
+        stored = _captcha_codes.pop(
+            _captcha_key(guild.id, member.id),
+            None,
+        )
         if stored is None or time.time() > stored[1]:
             await interaction.response.send_message(
                 "\u23f0 That captcha has expired — press **Verify** again for a new one.",
@@ -219,7 +253,10 @@ class CaptchaChallengeView(View):
     @discord.ui.button(label="Enter Code", style=discord.ButtonStyle.primary,
                        emoji="\u2328\ufe0f", custom_id="captcha_submit_btn")
     async def submit(self, interaction: discord.Interaction, button: Button):
-        stored = _captcha_codes.get(interaction.user.id)
+        _prune_expired_state()
+        stored = _captcha_codes.get(
+            _captcha_key(interaction.guild.id, interaction.user.id)
+        )
         if stored is None or time.time() > stored[1]:
             await interaction.response.send_message(
                 "\u23f0 That captcha has expired — press **Verify** again for a new one.",
@@ -229,9 +266,7 @@ class CaptchaChallengeView(View):
 
     async def on_timeout(self):
         # Codes expire with the view; entries are cleaned lazily on next use
-        for uid, (_, expiry) in list(_captcha_codes.items()):
-            if expiry <= time.time():
-                _captcha_codes.pop(uid, None)
+        _prune_expired_state()
 
 
 class VerifyPanelView(View):
@@ -267,7 +302,7 @@ class VerifyPanelView(View):
             return
 
         # Captcha mode: fresh image + ephemeral code-entry view
-        buffer = _new_captcha(member.id)
+        buffer = await _new_captcha(interaction.guild.id, member.id)
         embed = discord.Embed(
             title="\U0001f9e9 Verification Captcha",
             description=(
@@ -324,10 +359,20 @@ class VerificationPanelView(PanelView):
                 ephemeral=True)
         else:  # role
             role = interaction.guild.get_role(int(payload))
-            await set_guild_setting(guild_id, "verified_role", role.id)
-            await interaction.response.send_message(
-                embed=ok_embed(f"Verified role set to {role.mention}. Anyone who passes "
-                               "verification will now receive it."), ephemeral=True)
+            if role is None:
+                await interaction.response.send_message(
+                    embed=ok_embed("That role no longer exists. Pick another role."),
+                    ephemeral=True,
+                )
+            else:
+                await set_guild_setting(guild_id, "verified_role", role.id)
+                await interaction.response.send_message(
+                    embed=ok_embed(
+                        f"Verified role set to {role.mention}. Anyone who passes "
+                        "verification will now receive it."
+                    ),
+                    ephemeral=True,
+                )
         await self._refresh(interaction)
 
     async def _refresh(self, interaction: discord.Interaction):
@@ -402,7 +447,15 @@ class Verification(commands.Cog):
             color=0x57f287,
         )
         embed.set_footer(text="If the button doesn't work, ask a staff member for help.")
-        await channel.send(embed=embed, view=VerifyPanelView())
+        try:
+            await channel.send(embed=embed, view=VerifyPanelView())
+        except (discord.Forbidden, discord.HTTPException):
+            await interaction.response.send_message(
+                "I couldn't send the verification panel. Check the channel permissions and try again.",
+                ephemeral=True,
+            )
+            return
+
         await interaction.response.send_message(f"Verification panel sent to {channel.mention}!",
                                                 ephemeral=True)
 

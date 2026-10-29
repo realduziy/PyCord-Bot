@@ -45,12 +45,26 @@ def _member_embed(title: str, color: str, member: discord.Member) -> discord.Emb
 class Events(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+
+    async def cog_load(self):
+        # Start managed loops only after the cog has been successfully added.
         self.db_cleanup.start()
         self.db_backup.start()
 
     async def cog_unload(self):
-        self.db_cleanup.cancel()
-        self.db_backup.cancel()
+        loops = (self.db_cleanup, self.db_backup)
+        for loop in loops:
+            loop.cancel()
+
+        pending = []
+        for loop in loops:
+            task = loop.get_task()
+            if task is not None:
+                pending.append(task)
+
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+
         # Tidy up the shared HTTP session (discord.py 2.x awaits async cog_unload)
         await close_session()
 

@@ -53,8 +53,9 @@ def _caps_ratio(text: str) -> float:
     return upper / len(letters)
 
 
-def _detect_infraction(cfg: TicketConfig, content: str) -> str | None:
+def _detect_infraction(cfg: TicketConfig, message: discord.Message) -> str | None:
     """Return the name of the module the message violates, or None."""
+    content = message.content or ""
     lowered = content.lower()
 
     if cfg.automod_blocked_words and any(
@@ -67,7 +68,12 @@ def _detect_infraction(cfg: TicketConfig, content: str) -> str | None:
     if cfg.automod_block_links and LINK_RE.search(content):
         return "External link"
 
-    if cfg.automod_max_mentions and len(content.split("<@")) - 1 > cfg.automod_max_mentions:
+    mention_count = (
+        len(message.mentions)
+        + len(message.role_mentions)
+        + int(message.mention_everyone)
+    )
+    if cfg.automod_max_mentions and mention_count > cfg.automod_max_mentions:
         return "Mass mention"
 
     if cfg.automod_caps_percent and _caps_ratio(content) * 100 >= cfg.automod_caps_percent:
@@ -391,20 +397,24 @@ class AutoMod(commands.Cog):
         if cfg.automod_staff_bypass and isinstance(message.author, discord.Member) and \
                 message.author.guild_permissions.manage_messages:
             return
-        # Don't police ticket channels
-        if message.channel.category and message.channel.category.name == "Tickets":
+        # Don't police channels under the configured ticket category. Using the
+        # configured category ID avoids depending on an exact display name.
+        if cfg.ticket_category and \
+                getattr(message.channel, "category_id", None) == cfg.ticket_category:
             return
 
-        infraction = _detect_infraction(cfg, message.content)
+        infraction = _detect_infraction(cfg, message)
         if infraction is None and _is_spam(message.author.id):
             infraction = "Message spam"
 
         if infraction is None:
             return
 
+        # Mark before deleting so a fast gateway delete event cannot be logged
+        # before the suppression marker exists.
+        mark_automod_deleted(message.id)
         try:
             await message.delete()
-            mark_automod_deleted(message.id)
         except (discord.Forbidden, discord.HTTPException):
             return
 

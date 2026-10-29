@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 from typing import Optional
 
@@ -478,9 +479,26 @@ class Voice(commands.Cog):
             return
 
         await interaction.response.defer(ephemeral=True)
-        new_channel = await interaction.guild.create_voice_channel(
-            name or DEFAULT_HUB_NAME, category=interaction.channel.category,
-            reason=f"Voice hub created by {interaction.user}")
+        try:
+            new_channel = await interaction.guild.create_voice_channel(
+                name or DEFAULT_HUB_NAME,
+                category=interaction.channel.category,
+                reason=f"Voice hub created by {interaction.user}",
+            )
+        except discord.Forbidden:
+            await interaction.followup.send(
+                "I couldn't create the voice hub. Check that my role can create "
+                "channels in that category.",
+                ephemeral=True,
+            )
+            return
+        except discord.HTTPException:
+            await interaction.followup.send(
+                "Discord couldn't create the voice hub. Try a different name or category.",
+                ephemeral=True,
+            )
+            return
+
         await _add_hub(guild_id, str(new_channel.id), DEFAULT_TEMPLATE)
         await interaction.followup.send(
             f"\u2705 Hub created: {new_channel.mention}\n"
@@ -529,6 +547,10 @@ class Voice(commands.Cog):
             if channel is None:
                 await _remove_temp(temp["channel_id"])
             elif not channel.members:
+                if deleted:
+                    # Channel deletion is a route-limited endpoint. Pacing bulk
+                    # cleanup avoids bursts of Discord 429 responses.
+                    await asyncio.sleep(1.05)
                 await self._delete_temp(channel)
                 deleted += 1
         await interaction.followup.send(

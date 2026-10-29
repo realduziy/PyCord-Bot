@@ -1,4 +1,5 @@
 import ast
+import math
 import operator
 import random
 from typing import Optional
@@ -6,7 +7,6 @@ from typing import Optional
 import discord
 from discord import app_commands
 from discord.ext import commands
-from discord.ui import Button, View
 
 from cog_utils import fetch_json
 from ui_common import base_embed
@@ -26,60 +26,61 @@ _OPS = {
 }
 
 
+MAX_EXPRESSION_LENGTH = 100
+MAX_EXPRESSION_NODES = 50
+MAX_INTEGER_BITS = 4096
+MAX_ABS_FLOAT = 1e15
+
+
+def _checked_number(value):
+    """Reject values that can consume excessive CPU/memory or break output."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError("Unsupported numeric value")
+
+    if isinstance(value, int) and value.bit_length() > MAX_INTEGER_BITS:
+        raise ValueError("Result is too large")
+
+    if isinstance(value, float):
+        if not math.isfinite(value) or abs(value) > MAX_ABS_FLOAT:
+            raise ValueError("Result is too large")
+
+    return value
+
+
 def safe_eval(expression: str):
-    node = ast.parse(expression, mode="eval").body
+    expression = expression.strip()
+    if not expression or len(expression) > MAX_EXPRESSION_LENGTH:
+        raise ValueError("Expression is empty or too long")
+
+    tree = ast.parse(expression, mode="eval")
+    if len(list(ast.walk(tree))) > MAX_EXPRESSION_NODES:
+        raise ValueError("Expression is too complex")
+
+    node = tree.body
 
     def ev(n):
-        if isinstance(n, ast.Constant) and isinstance(n.value, (int, float)):
-            return n.value
+        if isinstance(n, ast.Constant) and isinstance(n.value, (int, float)) \
+                and not isinstance(n.value, bool):
+            return _checked_number(n.value)
+
         if isinstance(n, ast.BinOp) and type(n.op) in _OPS:
-            left, right = ev(n.left), ev(n.right)
-            if isinstance(n.op, ast.Pow) and abs(right) > 1000:
-                raise ValueError("Exponent too large")
-            return _OPS[type(n.op)](left, right)
+            left = _checked_number(ev(n.left))
+            right = _checked_number(ev(n.right))
+
+            if isinstance(n.op, ast.Pow):
+                if abs(right) > 1000:
+                    raise ValueError("Exponent too large")
+                if left < 0 and not float(right).is_integer():
+                    raise ValueError("Fractional powers of negative numbers are unsupported")
+
+            return _checked_number(_OPS[type(n.op)](left, right))
+
         if isinstance(n, ast.UnaryOp) and type(n.op) in _OPS:
-            return _OPS[type(n.op)](ev(n.operand))
+            return _checked_number(_OPS[type(n.op)](_checked_number(ev(n.operand))))
+
         raise ValueError("Unsupported expression")
 
     return ev(node)
-
-
-class HelpPaginator(View):
-    def __init__(self, pages):
-        super().__init__(timeout=120)
-        self.pages = pages
-        self.cur_page = 0
-        self.message: discord.Message | None = None
-        self._update_buttons()
-
-    def _update_buttons(self):
-        # Disable arrows at the ends so the layout feels intentional
-        self.prev_page.disabled = self.cur_page == 0
-        self.next_page.disabled = self.cur_page == len(self.pages) - 1
-
-    @discord.ui.button(label="\u25c0\ufe0f", style=discord.ButtonStyle.primary)
-    async def prev_page(self, interaction: discord.Interaction, button: Button):
-        if self.cur_page > 0:
-            self.cur_page -= 1
-        self._update_buttons()
-        await interaction.response.edit_message(embed=self.pages[self.cur_page], view=self)
-
-    @discord.ui.button(label="\u25b6\ufe0f", style=discord.ButtonStyle.primary)
-    async def next_page(self, interaction: discord.Interaction, button: Button):
-        if self.cur_page < len(self.pages) - 1:
-            self.cur_page += 1
-        self._update_buttons()
-        await interaction.response.edit_message(embed=self.pages[self.cur_page], view=self)
-
-    async def on_timeout(self):
-        # Freeze the arrows and persist the disabled state on the message
-        for child in self.children:
-            child.disabled = True
-        if self.message:
-            try:
-                await self.message.edit(view=self)
-            except discord.HTTPException:
-                pass
 
 
 class Fun(commands.Cog):
@@ -228,7 +229,12 @@ class Fun(commands.Cog):
         embed = base_embed(f"{guild.name}", "primary", guild.description or "")
         if guild.icon:
             embed.set_thumbnail(url=guild.icon.url)
-        embed.add_field(name="Owner", value=guild.owner.mention if guild.owner else "Unknown", inline=True)
+        owner_value = (
+            f"<@{guild.owner_id}>"
+            if guild.owner_id
+            else "Unknown"
+        )
+        embed.add_field(name="Owner", value=owner_value, inline=True)
         embed.add_field(name="ID", value=guild.id, inline=True)
         embed.add_field(name="Created at", value=guild.created_at.strftime("%Y-%m-%d %H:%M:%S"), inline=True)
         embed.add_field(name="Members", value=guild.member_count, inline=True)
@@ -242,43 +248,6 @@ class Fun(commands.Cog):
         embed = discord.Embed(description=message, color=0xFF0000)
         embed.set_footer(text=f"Announced by {interaction.user.name}")
         await interaction.response.send_message(embed=embed)
-
-    @app_commands.command(name="help", description="Shows all commands.")
-    async def help_cmd(self, interaction: discord.Interaction):
-        # Built dynamically from the command tree so it never drifts out of date
-        category_titles = {
-            "Events": "\u2699\ufe0f Utilities",
-            "Moderation": "\U0001f6e1\ufe0f Moderation",
-            "Logging": "\U0001f4cb Logging",
-            "AutoMod": "\U0001f6e1\ufe0f Auto-Moderation",
-            "Verification": "\U0001f39f\ufe0f Verification",
-            "Voice": "\U0001f50a Voice",
-            "Fun": "\U0001f3ae Fun & Info",
-            "Tickets": "\U0001f3ab Tickets",
-        }
-        categories = []
-        for cog_name, title in category_titles.items():
-            cog = interaction.client.get_cog(cog_name)
-            if not cog:
-                continue
-            cmds = sorted(cog.get_app_commands(), key=lambda c: c.name)
-            if cmds:
-                categories.append((title, cmds))
-
-        pages = []
-        total = len(categories)
-        for i, (title, cmds) in enumerate(categories):
-            embed = discord.Embed(title=title, color=discord.Color.blurple())
-            for cmd in cmds:
-                embed.add_field(name=f"/{cmd.name}", value=cmd.description or "No description", inline=True)
-            embed.set_thumbnail(url=interaction.client.user.display_avatar.url)
-            embed.set_footer(text=f"Page {i + 1}/{total} \u00b7 use the buttons to browse")
-            pages.append(embed)
-
-        view = HelpPaginator(pages)
-        await interaction.response.send_message(embed=pages[0], view=view)
-        view.message = await interaction.original_response()
-
 
 async def setup(bot):
     await bot.add_cog(Fun(bot))

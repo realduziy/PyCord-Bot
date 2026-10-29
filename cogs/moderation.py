@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import re
 from typing import Optional
@@ -16,6 +17,7 @@ from cog_utils import (
     get_recent_cases,
     log_case,
     log_event,
+    mark_automod_deleted,
     record_lockdown,
     remove_lockdown_channel,
 )
@@ -37,6 +39,64 @@ def _bot_can_act(guild: discord.Guild, target) -> bool:
     if isinstance(target, discord.Member) and guild.me.top_role <= target.top_role:
         return False
     return True
+
+
+# Discord only permits bulk-deleting messages younger than 14 days. Deleting
+# older messages one-by-one is allowed, but doing it too quickly hits the
+# per-channel DELETE rate limit, so those deletions are deliberately paced.
+# Leave a small safety buffer below Discord's hard 14-day bulk-delete limit so
+# clock differences cannot cause an API rejection at the boundary.
+_BULK_DELETE_MAX_AGE = datetime.timedelta(days=13, hours=23)
+_OLD_MESSAGE_DELETE_DELAY = 1.05
+
+
+async def _bulk_delete_messages(channel: discord.TextChannel,
+                                messages: list[discord.Message]) -> tuple[int, int]:
+    """Bulk-delete messages, returning ``(deleted, already_gone)``.
+
+    A message can be removed by another moderator/auto-mod after we fetch it
+    but before the bulk request lands. ``NotFound`` is therefore treated as a
+    per-message miss instead of failing the whole ``/clear`` command.
+    """
+    if not messages:
+        return 0, 0
+
+    # Prevent the raw message-delete logger from posting one embed per message
+    # if a bulk request has to fall back to individual deletes below.
+    for message in messages:
+        mark_automod_deleted(message.id)
+
+    try:
+        await channel.delete_messages(messages)
+        return len(messages), 0
+    except discord.NotFound:
+        deleted = already_gone = 0
+        for index, message in enumerate(messages):
+            if index:
+                await asyncio.sleep(_OLD_MESSAGE_DELETE_DELAY)
+            try:
+                await message.delete()
+                deleted += 1
+            except discord.NotFound:
+                already_gone += 1
+        return deleted, already_gone
+
+
+async def _delete_old_messages(messages: list[discord.Message]) -> tuple[int, int]:
+    """Pace individual deletes for messages that are too old to bulk-delete."""
+    deleted = already_gone = 0
+    for index, message in enumerate(messages):
+        # Mark before sleeping/deleting so the delete logger does not emit a
+        # separate log embed (and API request) for every purged message.
+        mark_automod_deleted(message.id)
+        if index:
+            await asyncio.sleep(_OLD_MESSAGE_DELETE_DELAY)
+        try:
+            await message.delete()
+            deleted += 1
+        except discord.NotFound:
+            already_gone += 1
+    return deleted, already_gone
 
 
 async def _modlog(guild, action, actor, target, reason=None, extra=None):
@@ -359,16 +419,40 @@ class Moderation(commands.Cog):
     @app_commands.command(name="clear", description="Clears the specified amount of messages (1-100).")
     @app_commands.checks.has_permissions(manage_messages=True)
     @app_commands.checks.bot_has_permissions(manage_messages=True)
+    @app_commands.checks.cooldown(1, 5.0,
+                                  key=lambda i: (i.guild_id, i.channel_id))
     async def clear(self, interaction: discord.Interaction, amount: app_commands.Range[int, 1, 100]):
         if not isinstance(interaction.channel, discord.TextChannel):
             await interaction.response.send_message(
                 "This command only works in text channels.", ephemeral=True)
             return
         await interaction.response.defer(ephemeral=True)
-        deleted = await interaction.channel.purge(limit=amount)
-        await interaction.followup.send(f"Deleted {len(deleted)} messages.", ephemeral=True)
-        await _modlog(interaction.guild, "Clear", interaction.user, interaction.channel,
-                      extra=f"{len(deleted)} messages purged in {interaction.channel.mention}")
+
+        channel = interaction.channel
+        messages = [message async for message in channel.history(limit=amount)]
+        if not messages:
+            await interaction.followup.send("There are no messages to delete.", ephemeral=True)
+            return
+
+        cutoff = datetime.datetime.now(datetime.timezone.utc) - _BULK_DELETE_MAX_AGE
+        bulkable = [m for m in messages if m.created_at >= cutoff]
+        too_old = [m for m in messages if m.created_at < cutoff]
+
+        bulk_deleted, bulk_missing = await _bulk_delete_messages(channel, bulkable)
+        old_deleted, old_missing = await _delete_old_messages(too_old)
+
+        deleted = bulk_deleted + old_deleted
+        already_gone = bulk_missing + old_missing
+        response = f"Deleted {deleted} message{'s' if deleted != 1 else ''}."
+        if too_old:
+            response += (f" {len(too_old)} were outside Discord's bulk-delete window and were "
+                         "deleted individually to stay under Discord's rate limit.")
+        if already_gone:
+            response += f" {already_gone} had already been deleted."
+        await interaction.followup.send(response, ephemeral=True)
+
+        await _modlog(interaction.guild, "Clear", interaction.user, channel,
+                      extra=f"{deleted} messages purged in {channel.mention}")
 
     @app_commands.command(name="cases", description="Show the most recent moderation cases.")
     @app_commands.checks.has_permissions(moderate_members=True)

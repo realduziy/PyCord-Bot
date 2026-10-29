@@ -23,6 +23,7 @@ from cog_utils import (
 )
 
 INACTIVITY_DAYS = 3  # auto-close tickets after this many days without messages
+TRANSCRIPT_MESSAGE_LIMIT = 5000  # protects memory usage on exceptionally large tickets
 
 # In-memory cache of open ticket channel IDs so on_message doesn't hit the DB
 # for every single message in every guild. Kept in sync on open/close.
@@ -77,7 +78,14 @@ async def build_transcript(channel: discord.TextChannel, ticket_info: aiosqlite.
                            reason: str, closer: str) -> str:
     """Build a styled HTML transcript of the ticket."""
     rows = []
-    async for message in channel.history(limit=None, oldest_first=True):
+    transcript_truncated = False
+
+    async for message in channel.history(limit=TRANSCRIPT_MESSAGE_LIMIT + 1,
+                                         oldest_first=True):
+        if len(rows) >= TRANSCRIPT_MESSAGE_LIMIT:
+            transcript_truncated = True
+            break
+
         if message.author == channel.guild.me:
             continue
         content = message.content or ""
@@ -89,6 +97,13 @@ async def build_transcript(channel: discord.TextChannel, ticket_info: aiosqlite.
             f'<div class="msg"><span class="time">[{message.created_at.strftime("%Y-%m-%d %H:%M")}]</span> '
             f'<span class="author">{html_module.escape(str(message.author))}</span>: '
             f'{html_module.escape(content)}</div>'
+        )
+
+    if transcript_truncated:
+        rows.append(
+            '<div class="msg"><span class="time">[Transcript]</span> '
+            '<span class="author">System</span>: '
+            f'Transcript truncated after {TRANSCRIPT_MESSAGE_LIMIT:,} messages.</div>'
         )
 
     claimed = f'<@{ticket_info["claimed_by"]}>' if ticket_info["claimed_by"] else "Unclaimed"
@@ -245,20 +260,6 @@ class TicketCategorySelect(Select):
             await interaction.followup.send("Configured ticket category channel was not found.", ephemeral=True)
             return
 
-        async with aiosqlite.connect(DB_FILE) as db:
-            async with db.execute(
-                "SELECT COUNT(*) FROM tickets WHERE guild_id = ? AND user_id = ?",
-                (guild_id, str(interaction.user.id))
-            ) as cursor:
-                (open_count,) = await cursor.fetchone()
-
-        if open_count >= 1:
-            await interaction.followup.send(
-                "You already have an open ticket. Please close it before opening a new one.",
-                ephemeral=True
-            )
-            return
-
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
             interaction.user: discord.PermissionOverwrite(view_channel=True, send_messages=True, attach_files=True),
@@ -267,20 +268,69 @@ class TicketCategorySelect(Select):
             overwrites[support_role] = discord.PermissionOverwrite(view_channel=True, send_messages=True, attach_files=True)
 
         channel_name = f"{selected_category}-{interaction.user.name}"
-        ticket_channel = await guild.create_text_channel(
-            name=channel_name,
-            category=category,
-            overwrites=overwrites
-        )
-
-        async with aiosqlite.connect(DB_FILE) as db:
-            await db.execute(
-                "INSERT INTO tickets (channel_id, guild_id, user_id, user_name, created_at, claimed_by) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (str(ticket_channel.id), guild_id, str(interaction.user.id),
-                 str(interaction.user), str(ticket_channel.created_at), None)
+        try:
+            ticket_channel = await guild.create_text_channel(
+                name=channel_name,
+                category=category,
+                overwrites=overwrites,
             )
-            await db.commit()
+        except (discord.Forbidden, discord.HTTPException):
+            await interaction.followup.send(
+                "I couldn't create the ticket channel. Check my channel permissions and try again.",
+                ephemeral=True,
+            )
+            return
+
+        # Use an immediate transaction so two simultaneous menu submissions
+        # cannot both pass the "one open ticket" check. If another ticket is
+        # registered first, discard the channel we just created.
+        registered = False
+        db = await aiosqlite.connect(DB_FILE)
+        try:
+            await db.execute("BEGIN IMMEDIATE")
+            async with db.execute(
+                "SELECT COUNT(*) FROM tickets WHERE guild_id = ? AND user_id = ?",
+                (guild_id, str(interaction.user.id)),
+            ) as cursor:
+                (open_count,) = await cursor.fetchone()
+
+            if open_count >= 1:
+                await db.rollback()
+                await interaction.followup.send(
+                    "You already have an open ticket. Please close it before opening a new one.",
+                    ephemeral=True,
+                )
+            else:
+                await db.execute(
+                    "INSERT INTO tickets (channel_id, guild_id, user_id, user_name, created_at, claimed_by) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (
+                        str(ticket_channel.id),
+                        guild_id,
+                        str(interaction.user.id),
+                        str(interaction.user),
+                        str(ticket_channel.created_at),
+                        None,
+                    ),
+                )
+                await db.commit()
+                registered = True
+        except aiosqlite.Error:
+            await db.rollback()
+            await interaction.followup.send(
+                "The ticket was created, but I couldn't register it. Please ask staff to check the database.",
+                ephemeral=True,
+            )
+        finally:
+            await db.close()
+
+        if not registered:
+            try:
+                await ticket_channel.delete(reason="Duplicate ticket registration prevented")
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                pass
+            return
+
         _open_ticket_channels.add(ticket_channel.id)
 
         title = CATEGORY_TITLES.get(selected_category, "Support")
