@@ -648,7 +648,7 @@ class WizardEditSelect(discord.ui.Select):
         if not await self.view.guard(interaction):
             return
         if self.values[0] == "none":
-            await interaction.response.defer_update()
+            await interaction.response.defer()
             return
         await interaction.response.send_modal(
             RoleDetailsModal(self.wizard, int(self.values[0]))
@@ -1174,7 +1174,7 @@ class ManageRemoveSelect(discord.ui.Select):
         if not await view.guard(interaction):
             return
         if self.values[0] == "none":
-            await interaction.response.defer_update()
+            await interaction.response.defer()
             return
         await _delete_menu_role(view.menu_id, self.values[0])
         await refresh_posted_menu(view.bot, view.menu_id)
@@ -1214,7 +1214,7 @@ class ManageEditSelect(discord.ui.Select):
         if not await view.guard(interaction):
             return
         if self.values[0] == "none":
-            await interaction.response.defer_update()
+            await interaction.response.defer()
             return
         roles = await fetch_menu_roles(view.menu_id)
         entry = next((r for r in roles if r["role_id"] == self.values[0]), None)
@@ -1264,7 +1264,7 @@ class ManageSettingsSelect(discord.ui.Select):
             return
         kind, _, value = self.values[0].partition(":")
         if kind not in ("style", "mode"):
-            await interaction.response.defer_update()
+            await interaction.response.defer()
             return
         await _update_menu_meta(view.menu_id, **{kind: value})
         await refresh_posted_menu(view.bot, view.menu_id)
@@ -1390,7 +1390,7 @@ class ManagePostChannelSelect(discord.ui.ChannelSelect):
 
     async def callback(self, interaction: discord.Interaction):
         self.post_view.channel_id = self.values[0].id
-        await interaction.response.defer_update()
+        await interaction.response.defer()
 
 
 class ManagePostView(discord.ui.View):
