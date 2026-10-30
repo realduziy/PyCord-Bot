@@ -14,9 +14,20 @@ from ui_common import base_embed, ok_embed, truncate
 
 MAX_LEVEL = 10000
 
+# Auto-generated reward ladder: a role for level 1, then every 5 levels,
+# topping out at 40. Only seeded for levels a guild hasn't configured
+# manually — INSERT OR IGNORE never overwrites /levelroles add entries.
+DEFAULT_REWARD_LEVELS = (1, 5, 10, 15, 20, 25, 30, 35, 40)
+MAX_REWARD_LEVEL = 40
+# Placeholder that never resolves to a real role — apply_level_roles treats it
+# as "auto-create a Level N role here" when auto_create_roles is on.
+AUTO_ROLE_PLACEHOLDER = "0"
+
 
 def xp_for_next_level(level: int) -> int:
-    return int(100 * (level ** 1.5))
+    # 150 * level^1.5 — ~1.5x steeper than the old 100 * level^1.5 curve, so
+    # chatting levels you up a bit more slowly at every level.
+    return int(150 * (level ** 1.5))
 
 
 def level_for_xp(xp: int) -> tuple[int, int, int]:
@@ -104,9 +115,30 @@ async def fetch_role_rewards(guild_id: str) -> list[dict]:
     return [{"level": level, "role_id": role_id} for level, role_id in rows]
 
 
+async def ensure_default_role_rewards(guild_id: str):
+    """Seed the default Level 1/5/…/40 ladder for a guild.
+
+    INSERT OR IGNORE only — manually configured levels (via /levelroles add)
+    are never touched, and calling this repeatedly is a no-op.
+    """
+    async with aiosqlite.connect(DB_FILE) as db:
+        for level in DEFAULT_REWARD_LEVELS:
+            await db.execute(
+                "INSERT OR IGNORE INTO leveling_role_rewards "
+                "(guild_id, level, role_id, created_by, created_at) VALUES (?, ?, ?, ?, ?)",
+                (guild_id, level, AUTO_ROLE_PLACEHOLDER, "auto", str(discord.utils.utcnow())),
+            )
+        await db.commit()
+
+
 async def apply_level_roles(guild: discord.Guild, member: discord.Member,
                             new_level: int, config: dict,
                             actor: discord.abc.User | None = None) -> list[discord.Role]:
+    if config["auto_create_roles"]:
+        # Make sure the default ladder exists before deciding what's granted;
+        # placeholders flow into the auto-create branch below.
+        await ensure_default_role_rewards(str(guild.id))
+
     rewards = [reward for reward in await fetch_role_rewards(str(guild.id))
                if reward["level"] <= new_level]
     if not rewards:
@@ -638,8 +670,11 @@ class Leveling(commands.Cog):
 
         lines = []
         for reward in rewards:
-            role = interaction.guild.get_role(int(reward["role_id"]))
-            role_text = role.mention if role else f"`deleted role {reward['role_id']}`"
+            if reward["role_id"] == AUTO_ROLE_PLACEHOLDER:
+                role_text = "*auto — created on first grant*"
+            else:
+                role = interaction.guild.get_role(int(reward["role_id"]))
+                role_text = role.mention if role else f"`deleted role {reward['role_id']}`"
             lines.append(f"**Level {reward['level']}:** {role_text}")
 
         await interaction.response.send_message(
