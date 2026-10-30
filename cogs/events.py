@@ -75,6 +75,8 @@ class Events(commands.Cog):
         prune_spam_history()  # auto-mod's per-user message buffers
         if removed:
             log.info("DB cleanup removed stale entries: %s", removed)
+        else:
+            log.info("DB cleanup ran: everything is clean")
 
     @db_cleanup.before_loop
     async def before_db_cleanup(self):
@@ -161,9 +163,13 @@ class Events(commands.Cog):
     # --- Setup ---
     @app_commands.command(name="setup", description="Check this server's bot configuration and open setup panels.")
     async def setup_check(self, interaction: discord.Interaction):
+        from cogs.setup_wizard import WizardHomePanel
+        panel = WizardHomePanel()
         await interaction.response.send_message(
-            embed=await build_setup_hub_embed(interaction.guild),
-            view=SetupHubView(), ephemeral=True)
+            embed=panel.build(),
+            view=panel,
+            ephemeral=True,
+        )
 
     @app_commands.command(name="setup-auto", description="Automatically create and configure channels, roles and categories.")
     @app_commands.checks.has_permissions(administrator=True)

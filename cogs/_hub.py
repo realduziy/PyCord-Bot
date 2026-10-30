@@ -464,8 +464,50 @@ class SetupHubView(View):
             embed=await settings_panel_embed(interaction.guild),
             view=SettingsPanelView(interaction.guild), ephemeral=True)
 
+    @discord.ui.button(label="Community", style=discord.ButtonStyle.primary,
+                       emoji="🏘️", custom_id="hub_community_btn", row=1)
+    async def community_panel(self, interaction: discord.Interaction, button: Button):
+        from cogs.setup_panels import CommunityPanel
+        if not interaction.user.guild_permissions.manage_guild:
+            await deny(interaction)
+            return
+        panel = CommunityPanel(interaction.guild)
+        await interaction.response.send_message(
+            embed=await panel.build(),
+            view=panel,
+            ephemeral=True,
+        )
+
+    @discord.ui.button(label="Moderation Safety", style=discord.ButtonStyle.primary,
+                       emoji="⚖️", custom_id="hub_mod_safety_btn", row=1)
+    async def moderation_safety_panel(self, interaction: discord.Interaction, button: Button):
+        from cogs.setup_panels import ModerationSafetyPanel
+        if not interaction.user.guild_permissions.manage_guild:
+            await deny(interaction)
+            return
+        panel = ModerationSafetyPanel(interaction.guild)
+        await interaction.response.send_message(
+            embed=await panel.build(),
+            view=panel,
+            ephemeral=True,
+        )
+
+    @discord.ui.button(label="Server Defense", style=discord.ButtonStyle.primary,
+                       emoji="🚨", custom_id="hub_defense_btn", row=2)
+    async def server_defense_panel(self, interaction: discord.Interaction, button: Button):
+        from cogs.setup_panels import ServerDefensePanel
+        if not interaction.user.guild_permissions.manage_guild:
+            await deny(interaction)
+            return
+        panel = ServerDefensePanel(interaction.guild)
+        await interaction.response.send_message(
+            embed=await panel.build(),
+            view=panel,
+            ephemeral=True,
+        )
+
     @discord.ui.button(label="Quick Setup", style=discord.ButtonStyle.success,
-                       emoji=EMOJI["bolt"], custom_id="hub_quick_btn")
+                       emoji=EMOJI["bolt"], custom_id="hub_quick_btn", row=2)
     async def quick_setup(self, interaction: discord.Interaction, button: Button):
         if not interaction.user.guild_permissions.administrator:
             await deny(interaction, "Administrator")

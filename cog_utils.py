@@ -9,6 +9,8 @@ import aiosqlite
 import discord
 from pathlib import Path
 
+from ui_common import base_embed, truncate
+
 log = logging.getLogger("duziy-bot.db")
 
 dir_path = Path(__file__).parent.absolute()
@@ -138,7 +140,22 @@ async def init_db():
         await db.execute(  # mod_cases
             "CREATE TABLE IF NOT EXISTS mod_cases ("
             "case_id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id TEXT, action TEXT, "
-            "actor_id TEXT, target_id TEXT, reason TEXT, created_at TEXT)"
+            "actor_id TEXT, target_id TEXT, reason TEXT, created_at TEXT, "
+            "log_channel_id TEXT, log_message_id TEXT, edited_by TEXT, edited_at TEXT)"
+        )
+        await db.execute(
+            "CREATE TABLE IF NOT EXISTS role_maintenance_settings ("
+            "guild_id TEXT PRIMARY KEY, enabled INTEGER DEFAULT 0)"
+        )
+        await db.execute(
+            "CREATE TABLE IF NOT EXISTS role_maintenance_ignored_roles ("
+            "guild_id TEXT, role_id TEXT, PRIMARY KEY (guild_id, role_id))"
+        )
+        await db.execute(
+            "CREATE TABLE IF NOT EXISTS role_snapshots ("
+            "guild_id TEXT, user_id TEXT, role_ids TEXT DEFAULT '[]', "
+            "active INTEGER DEFAULT 1, created_at TEXT, updated_at TEXT, "
+            "PRIMARY KEY (guild_id, user_id))"
         )
         await db.execute(  # lockdown default channels (multi-select targets)
             "CREATE TABLE IF NOT EXISTS lockdown_channels ("
@@ -148,6 +165,48 @@ async def init_db():
             "CREATE TABLE IF NOT EXISTS active_lockdowns ("
             "guild_id TEXT, channel_id TEXT, prev_send INTEGER, locked_by TEXT, "
             "locked_at TEXT, PRIMARY KEY (guild_id, channel_id))"
+        )
+        await db.execute(  # saved lockdown presets
+            "CREATE TABLE IF NOT EXISTS lockdown_presets ("
+            "preset_id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id TEXT, name TEXT, "
+            "description TEXT, mode TEXT, channel_ids TEXT DEFAULT '[]', "
+            "duration_seconds INTEGER, notice TEXT, created_by TEXT, created_at TEXT, "
+            "UNIQUE (guild_id, name))"
+        )
+        await db.execute(  # active preset runs so expiration can restore exact channels
+            "CREATE TABLE IF NOT EXISTS lockdown_preset_runs ("
+            "run_id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id TEXT, preset_name TEXT, "
+            "channel_ids TEXT, started_by TEXT, started_at TEXT, ends_at REAL, "
+            "status TEXT DEFAULT 'active')"
+        )
+        await db.execute(  # anti-raid configuration
+            "CREATE TABLE IF NOT EXISTS anti_raid_config ("
+            "guild_id TEXT PRIMARY KEY, enabled INTEGER DEFAULT 0, "
+            "join_threshold INTEGER DEFAULT 10, window_seconds INTEGER DEFAULT 30, "
+            "new_account_days INTEGER DEFAULT 7, quarantine_role_id TEXT, "
+            "action TEXT DEFAULT 'lockdown_quarantine', duration_seconds INTEGER DEFAULT 900)"
+        )
+        await db.execute(  # persistent raid state and staff alert reference
+            "CREATE TABLE IF NOT EXISTS anti_raid_state ("
+            "guild_id TEXT PRIMARY KEY, active INTEGER DEFAULT 0, triggered_at REAL, "
+            "ends_at REAL, alert_channel_id TEXT, alert_message_id TEXT, "
+            "quarantined_user_ids TEXT DEFAULT '[]', triggered_by TEXT)"
+        )
+        await db.execute(  # recent joins used for rate detection
+            "CREATE TABLE IF NOT EXISTS anti_raid_joins ("
+            "guild_id TEXT, user_id TEXT, joined_at REAL, account_created_at REAL, "
+            "PRIMARY KEY (guild_id, user_id, joined_at))"
+        )
+        await db.execute(  # roles explicitly allowed through freezes/raid controls
+            "CREATE TABLE IF NOT EXISTS staff_bypass_roles ("
+            "guild_id TEXT, role_id TEXT, PRIMARY KEY (guild_id, role_id))"
+        )
+        await db.execute(  # emoji-based reaction role bindings
+            "CREATE TABLE IF NOT EXISTS reaction_role_bindings ("
+            "binding_id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id TEXT, "
+            "channel_id TEXT, message_id TEXT, role_id TEXT, emoji TEXT, "
+            "created_by TEXT, created_at TEXT, "
+            "UNIQUE (channel_id, message_id, emoji))"
         )
         await db.execute(  # customizable log events (missing row = enabled)
             "CREATE TABLE IF NOT EXISTS log_settings ("
@@ -186,6 +245,86 @@ async def init_db():
             "CREATE TABLE IF NOT EXISTS automod_exempt ("
             "guild_id TEXT, channel_id TEXT, PRIMARY KEY (guild_id, channel_id))"
         )
+        await db.execute(  # temporary slowmode restorations
+            "CREATE TABLE IF NOT EXISTS slowmode_restorations ("
+            "guild_id TEXT, channel_id TEXT, previous_delay INTEGER, "
+            "ends_at REAL, actor_id TEXT, reason TEXT, "
+            "PRIMARY KEY (guild_id, channel_id))"
+        )
+        await db.execute(  # frozen channels and their original overwrite snapshot
+            "CREATE TABLE IF NOT EXISTS channel_freezes ("
+            "guild_id TEXT, channel_id TEXT, overwrites_json TEXT, "
+            "ends_at REAL, actor_id TEXT, reason TEXT, created_at TEXT, "
+            "PRIMARY KEY (guild_id, channel_id))"
+        )
+        await db.execute(  # persistent reaction-role menus
+            "CREATE TABLE IF NOT EXISTS reaction_menus ("
+            "menu_id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id TEXT, "
+            "channel_id TEXT, message_id TEXT, name TEXT, description TEXT, "
+            "style TEXT, mode TEXT, created_by TEXT, created_at TEXT, "
+            "UNIQUE (guild_id, name))"
+        )
+        await db.execute(  # role entries attached to a reaction-role menu
+            "CREATE TABLE IF NOT EXISTS reaction_menu_roles ("
+            "menu_id INTEGER, role_id TEXT, label TEXT, emoji TEXT, "
+            "description TEXT, position INTEGER DEFAULT 0, "
+            "PRIMARY KEY (menu_id, role_id))"
+        )
+        await db.execute(  # persistent suggestion workflow
+            "CREATE TABLE IF NOT EXISTS suggestions ("
+            "suggestion_id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id TEXT, "
+            "channel_id TEXT, message_id TEXT, author_id TEXT, author_name TEXT, "
+            "title TEXT, content TEXT, anonymous INTEGER DEFAULT 0, "
+            "status TEXT DEFAULT 'open', created_at TEXT, "
+            "decided_by TEXT, decided_at TEXT)"
+        )
+        await db.execute(  # one vote per user per suggestion
+            "CREATE TABLE IF NOT EXISTS suggestion_votes ("
+            "suggestion_id INTEGER, user_id TEXT, vote INTEGER, "
+            "PRIMARY KEY (suggestion_id, user_id))"
+        )
+        await db.execute(  # per-guild suggestion channel setting
+            "CREATE TABLE IF NOT EXISTS suggestion_settings ("
+            "guild_id TEXT PRIMARY KEY, channel_id TEXT)"
+        )
+        await db.execute(  # per-guild counting channel state
+            "CREATE TABLE IF NOT EXISTS counting_state ("
+            "guild_id TEXT PRIMARY KEY, channel_id TEXT, enabled INTEGER DEFAULT 1, "
+            "current_count INTEGER DEFAULT 0, last_user_id TEXT, "
+            "high_count INTEGER DEFAULT 0, total_counts INTEGER DEFAULT 0, "
+            "ignored_roles TEXT DEFAULT '[]')"
+        )
+        await db.execute(  # persistent giveaways
+            "CREATE TABLE IF NOT EXISTS giveaways ("
+            "giveaway_id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id TEXT, "
+            "channel_id TEXT, message_id TEXT, host_id TEXT, prize TEXT, "
+            "winners INTEGER, ends_at REAL, required_role_id TEXT, "
+            "status TEXT DEFAULT 'active', winner_ids TEXT, created_at TEXT)"
+        )
+        await db.execute(  # one entry per user per giveaway
+            "CREATE TABLE IF NOT EXISTS giveaway_entries ("
+            "giveaway_id INTEGER, user_id TEXT, joined_at TEXT, "
+            "PRIMARY KEY (giveaway_id, user_id))"
+        )
+        await db.execute(  # leveling configuration and per-user XP
+            "CREATE TABLE IF NOT EXISTS leveling_config ("
+            "guild_id TEXT PRIMARY KEY, enabled INTEGER DEFAULT 0, "
+            "xp_min INTEGER DEFAULT 15, xp_max INTEGER DEFAULT 25, "
+            "cooldown_seconds INTEGER DEFAULT 60, stack_roles INTEGER DEFAULT 1, "
+            "auto_create_roles INTEGER DEFAULT 1, "
+            "ignored_channels TEXT DEFAULT '[]', ignored_roles TEXT DEFAULT '[]')"
+        )
+        await db.execute(
+            "CREATE TABLE IF NOT EXISTS leveling_users ("
+            "guild_id TEXT, user_id TEXT, xp INTEGER DEFAULT 0, "
+            "message_count INTEGER DEFAULT 0, last_xp REAL DEFAULT 0, "
+            "opt_out INTEGER DEFAULT 0, PRIMARY KEY (guild_id, user_id))"
+        )
+        await db.execute(  # level-to-role links remain valid if roles are renamed
+            "CREATE TABLE IF NOT EXISTS leveling_role_rewards ("
+            "guild_id TEXT, level INTEGER, role_id TEXT, created_by TEXT, created_at TEXT, "
+            "PRIMARY KEY (guild_id, level))"
+        )
         await db.execute(  # voice hubs: join these to spawn a temp channel
             "CREATE TABLE IF NOT EXISTS voice_hubs ("
             "guild_id TEXT, channel_id TEXT, name_template TEXT, "
@@ -196,6 +335,12 @@ async def init_db():
             "channel_id TEXT PRIMARY KEY, guild_id TEXT, owner_id TEXT, "
             "hub_id TEXT, created_at TEXT)"
         )
+        await _ensure_columns(db, "mod_cases", {
+            "log_channel_id": "TEXT",
+            "log_message_id": "TEXT",
+            "edited_by": "TEXT",
+            "edited_at": "TEXT",
+        })
         await _ensure_columns(db, "voice_temps", {"panel_message_id": "TEXT"})
         await db.commit()
 
@@ -208,6 +353,27 @@ async def _ensure_columns(db, table: str, columns: dict):
             await db.execute(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")
 
 
+async def get_staff_bypass_roles(guild_id: str) -> set[int]:
+    """Return roles explicitly allowed through freezes and raid controls."""
+    async with aiosqlite.connect(DB_FILE) as db:
+        async with db.execute(
+            "SELECT role_id FROM staff_bypass_roles WHERE guild_id = ?",
+            (guild_id,),
+        ) as cursor:
+            rows = await cursor.fetchall()
+    return {int(row[0]) for row in rows}
+
+
+async def set_staff_bypass_roles(guild_id: str, role_ids: set[int]):
+    async with aiosqlite.connect(DB_FILE) as db:
+        await db.execute("DELETE FROM staff_bypass_roles WHERE guild_id = ?", (guild_id,))
+        await db.executemany(
+            "INSERT OR IGNORE INTO staff_bypass_roles (guild_id, role_id) VALUES (?, ?)",
+            [(guild_id, str(role_id)) for role_id in sorted(role_ids)],
+        )
+        await db.commit()
+
+
 # --- Event catalog for the customizable logging system ---
 # Category -> (display name, {sub-event key: label}). Every sub-event is its
 # own on/off toggle; channel overrides (below) work at category level.
@@ -217,6 +383,9 @@ LOG_CATEGORIES = {
         "mod_ban": "Bans",
         "mod_unban": "Unbans",
         "mod_timeout": "Timeouts",
+        "mod_case_update": "Mod Case Updated",
+        "message_report": "Message Reported",
+        "role_restored": "Roles Restored",
     }),
     "automod": ("Discord AutoMod", {
         "automod_action": "AutoMod Actions",
@@ -305,6 +474,27 @@ LOG_CATEGORIES = {
     "lockdown": ("Lockdowns", {
         "lockdown_start": "Lockdown Started",
         "lockdown_end": "Lockdown Ended",
+    }),
+    "channel_tools": ("Channel Tools", {
+        "slowmode_start": "Temporary Slowmode Applied",
+        "slowmode_end": "Temporary Slowmode Restored",
+        "channel_freeze": "Channel Frozen",
+        "channel_unfreeze": "Channel Unfrozen",
+    }),
+    "server_defense": ("Server Defense", {
+        "anti_raid_trigger": "Anti-Raid Triggered",
+        "anti_raid_arm": "Anti-Raid Armed",
+        "anti_raid_disarm": "Anti-Raid Disarmed",
+        "lockdown_preset_update": "Lockdown Preset Updated",
+    }),
+    "community": ("Community", {
+        "suggestion_open": "Suggestion Opened",
+        "suggestion_update": "Suggestion Updated",
+        "reaction_menu_update": "Reaction Role Menu Updated",
+        "giveaway_start": "Giveaway Started",
+        "giveaway_end": "Giveaway Ended",
+        "giveaway_update": "Giveaway Updated",
+        "level_role_reward": "Level Role Reward",
     }),
 }
 
@@ -462,24 +652,27 @@ async def ensure_guild_config(guild_id: str):
 
 # --- Typed config row (kills repeated SELECT boilerplate) ---
 class TicketConfig:
+    # ID columns are TEXT in the DB — coerce to int here (once) so every
+    # guild.get_channel()/get_role() lookup below actually matches. Passing a
+    # str ID to those methods silently returns None (cache keys are ints).
+    _ID_COLUMNS = (
+        "join_channel", "leave_channel", "log_channel", "ticket_panel_channel",
+        "transcripts_channel", "ticket_support_role", "ticket_category",
+        "verified_role", "verify_channel",
+    )
+
     def __init__(self, row):
         self.guild_id = row["guild_id"]
-        self.join_channel = row["join_channel"]
-        self.leave_channel = row["leave_channel"]
         self.join_message = row["join_message"]
         self.leave_message = row["leave_message"]
-        self.log_channel = row["log_channel"]
-        self.ticket_panel_channel = row["ticket_panel_channel"]
-        self.transcripts_channel = row["transcripts_channel"]
-        self.ticket_support_role = row["ticket_support_role"]
-        self.ticket_category = row["ticket_category"]
         # console debug traces for message events (default: off — quiet console)
         self.log_debug = bool(row["log_debug"])
         # verification
-        self.verified_role = row["verified_role"]
-        self.verify_channel = row["verify_channel"]
         self.verification_enabled = bool(row["verification_enabled"])
         self.verify_mode = row["verify_mode"] or "captcha"  # "captcha" or "click"
+        for column in self._ID_COLUMNS:
+            value = row[column]
+            setattr(self, column, int(value) if value is not None else None)
         # auto-moderation
         self.automod_enabled = bool(row["automod_enabled"])
         self.automod_caps_percent = row["automod_caps_percent"] or 0
@@ -509,61 +702,106 @@ class TicketConfig:
 
 
 # --- Logging ---
-async def log_event(guild: discord.Guild, event: str, embed: discord.Embed,
-                    channel: discord.abc.GuildChannel | None = None) -> bool:
+async def log_event(
+    guild: discord.Guild,
+    event: str,
+    embed: discord.Embed | discord.Member | discord.User | None = None,
+    channel: discord.abc.GuildChannel | discord.Role | None = None,
+    *,
+    reason: str | None = None,
+    extra: str | None = None,
+) -> discord.Message | None:
     """Send an embed to the guild's log channel, respecting per-event toggles.
 
-    Pass ``channel`` when the event happened IN a channel so ignored channels
-    (and threads inside them / channels under an ignored category) are
-    skipped. Ignores only apply to activity events — structural ones (channel
-    created/deleted, etc.) are always logged.
+    Two calling styles:
+
+    - Modern: ``log_event(guild, event, embed, context_channel=None)`` — pass
+      ``context_channel`` when the event happened IN a channel so ignored
+      channels (and threads inside them / channels under an ignored category)
+      are skipped. Ignores only apply to activity events — structural ones
+      (channel created/deleted, etc.) are always logged.
+    - Legacy: ``log_event(guild, event, actor, target, reason=..., extra=...)``
+      — an embed is built automatically (``target`` may be a channel or role and
+      is only shown as a field, never used for ignore filtering). Kept so
+      older cogs keep logging instead of raising TypeError.
 
     Failures are logged to the console (not silently swallowed) so a
     misconfigured log channel is easy to spot.
     """
+    context = None
+    if embed is None or reason is not None or extra is not None \
+            or not isinstance(embed, discord.Embed):
+        # Legacy style: (guild, event, actor, target, reason=..., extra=...)
+        # Detected via reason=/extra= (modern callers never pass those) so a
+        # None actor still routes here instead of trying to send a None embed.
+        actor = embed
+        target = channel if isinstance(channel, (discord.abc.GuildChannel, discord.Role)) else None
+        legacy_embed = discord.Embed(
+            title=event.replace("_", " ").title(),
+            color=discord.Color.blurple(),
+        )
+        if reason:
+            legacy_embed.description = str(reason)
+        if actor is not None:
+            legacy_embed.add_field(
+                name="Moderator",
+                value=getattr(actor, "mention", None) or str(actor),
+                inline=True,
+            )
+        if target is not None:
+            legacy_embed.add_field(
+                name="Target",
+                value=getattr(target, "mention", None) or str(target),
+                inline=True,
+            )
+        if extra:
+            legacy_embed.add_field(name="Details", value=str(extra), inline=False)
+        embed = legacy_embed
+    else:
+        context = channel
+
     guild_id = str(guild.id)
     if not await is_log_event_enabled(guild_id, event):
-        return False
-    if channel is not None:
+        return None
+    if context is not None:
         ignored = set(await get_log_ignored(guild_id))
         if ignored:
-            relevant = {str(channel.id)}
+            relevant = {str(context.id)}
             # threads: also respect their parent channel / category
-            parent_id = getattr(channel, "parent_id", None)
+            parent_id = getattr(context, "parent_id", None)
             if parent_id:
                 relevant.add(str(parent_id))
-            category_id = getattr(channel, "category_id", None)
+            category_id = getattr(context, "category_id", None)
             if category_id:
                 relevant.add(str(category_id))
             if relevant & ignored:
-                return False
+                return None
         # per-channel override: "log everything here EXCEPT category X"
-        if await is_log_event_suppressed_in(guild_id, event, channel):
-            return False
+        if await is_log_event_suppressed_in(guild_id, event, context):
+            return None
     cfg = await TicketConfig.fetch(guild_id)
     if not cfg.log_channel:
         log.warning("log_event (%s): no log channel configured for guild %s", event, guild_id)
-        return False
-    channel = guild.get_channel(cfg.log_channel)
+        return None
+    channel = guild.get_channel(int(cfg.log_channel))
     if not channel:
         log.warning("log_event (%s): configured log channel %s no longer exists in guild %s",
                     event, cfg.log_channel, guild_id)
-        return False
+        return None
     try:
-        await channel.send(embed=embed)
-        return True
+        return await channel.send(embed=embed)
     except discord.Forbidden:
         log.warning("log_event (%s): missing permissions in log channel %s (guild %s) — "
                     "the bot needs Send Messages and Embed Links",
                     event, channel.id, guild_id)
-        return False
+        return None
     except discord.HTTPException as e:
         log.warning("log_event (%s): failed to send to log channel %s (guild %s): %s",
                     event, channel.id, guild_id, e)
-        return False
+        return None
 
 
-async def log_action(guild: discord.Guild, embed: discord.Embed) -> bool:
+async def log_action(guild: discord.Guild, embed: discord.Embed) -> discord.Message | None:
     """Backward-compatible wrapper: moderation-flavored events."""
     return await log_event(guild, "mod", embed)
 
@@ -909,6 +1147,105 @@ async def cleanup_stale_entries(bot) -> dict:
                         f"UPDATE guild_settings SET {column} = NULL "
                         f"WHERE guild_id = ?", (row["guild_id"],))
                     bump("guild_settings", 1)
+
+        # --- Reaction-role menus whose posted message is gone ---
+        # The menu itself survives (it stays editable and re-postable via
+        # /reactionrole manage); only the dead channel/message refs are
+        # cleared, and only when Discord CONFIRMS they're gone.
+        async with db.execute(
+            "SELECT menu_id, guild_id, channel_id, message_id FROM reaction_menus"
+        ) as cur:
+            menu_rows = await cur.fetchall()
+        for row in menu_rows:
+            if not row["channel_id"] or not row["message_id"]:
+                continue
+            guild = bot.get_guild(int(row["guild_id"]))
+            if guild is None:
+                continue  # can't verify — keep the row
+            channel_id = int(row["channel_id"])
+            channel = guild.get_channel(channel_id)
+            if channel is None:
+                try:
+                    channel = await guild.fetch_channel(channel_id)
+                except discord.NotFound:
+                    channel = None
+                except (discord.HTTPException, discord.Forbidden):
+                    continue  # couldn't verify — keep
+            if channel is None:
+                await db.execute(
+                    "UPDATE reaction_menus SET channel_id = NULL, message_id = NULL "
+                    "WHERE menu_id = ?", (row["menu_id"],))
+                bump("reaction_menus", 1)
+                continue
+            try:
+                await channel.fetch_message(int(row["message_id"]))
+            except discord.NotFound:
+                await db.execute(
+                    "UPDATE reaction_menus SET channel_id = NULL, message_id = NULL "
+                    "WHERE menu_id = ?", (row["menu_id"],))
+                bump("reaction_menus", 1)
+            except (discord.HTTPException, discord.Forbidden):
+                pass  # couldn't verify — keep
+
+        # --- Menu entries whose role was deleted from the server ---
+        async with db.execute(
+            "SELECT r.menu_id, r.role_id, m.guild_id FROM reaction_menu_roles r "
+            "JOIN reaction_menus m ON m.menu_id = r.menu_id"
+        ) as cur:
+            menu_role_rows = await cur.fetchall()
+        for row in menu_role_rows:
+            guild = bot.get_guild(int(row["guild_id"]))
+            if guild is None:
+                continue
+            exists = await _role_exists(guild, int(row["role_id"]))
+            if exists is False:
+                await db.execute(
+                    "DELETE FROM reaction_menu_roles "
+                    "WHERE menu_id = ? AND role_id = ?",
+                    (row["menu_id"], row["role_id"]))
+                bump("reaction_menu_roles", 1)
+
+        # --- Emoji bindings whose role, message or channel is gone ---
+        async with db.execute(
+            "SELECT binding_id, guild_id, channel_id, message_id, role_id "
+            "FROM reaction_role_bindings"
+        ) as cur:
+            binding_rows = await cur.fetchall()
+        for row in binding_rows:
+            guild = bot.get_guild(int(row["guild_id"]))
+            if guild is None:
+                continue
+            role_exists = await _role_exists(guild, int(row["role_id"]))
+            if role_exists is False:
+                await db.execute(
+                    "DELETE FROM reaction_role_bindings WHERE binding_id = ?",
+                    (row["binding_id"],))
+                bump("reaction_role_bindings", 1)
+                continue
+            channel_id = int(row["channel_id"])
+            channel = guild.get_channel(channel_id)
+            if channel is None:
+                try:
+                    channel = await guild.fetch_channel(channel_id)
+                except discord.NotFound:
+                    channel = None
+                except (discord.HTTPException, discord.Forbidden):
+                    continue
+            if channel is None:
+                await db.execute(
+                    "DELETE FROM reaction_role_bindings WHERE binding_id = ?",
+                    (row["binding_id"],))
+                bump("reaction_role_bindings", 1)
+                continue
+            try:
+                await channel.fetch_message(int(row["message_id"]))
+            except discord.NotFound:
+                await db.execute(
+                    "DELETE FROM reaction_role_bindings WHERE binding_id = ?",
+                    (row["binding_id"],))
+                bump("reaction_role_bindings", 1)
+            except (discord.HTTPException, discord.Forbidden):
+                pass  # couldn't verify — keep
 
         await db.commit()
     return removed

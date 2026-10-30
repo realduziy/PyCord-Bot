@@ -1,6 +1,5 @@
 import asyncio
 import datetime
-import html as html_module
 import io
 from typing import Optional
 
@@ -74,9 +73,11 @@ def ticket_log_embed(title: str, color: int) -> discord.Embed:
     return embed
 
 
-async def build_transcript(channel: discord.TextChannel, ticket_info: aiosqlite.Row,
-                           reason: str, closer: str) -> str:
-    """Build a styled HTML transcript of the ticket."""
+async def build_transcript(channel: discord.TextChannel) -> tuple[str, int]:
+    """Build the plain-text message log: one '[date] author: content' per line.
+
+    Returns (text, message_count) — the count excludes the truncation notice.
+    """
     rows = []
     transcript_truncated = False
 
@@ -94,52 +95,48 @@ async def build_transcript(channel: discord.TextChannel, ticket_info: aiosqlite.
         if not content:
             content = "[No Text Content]"
         rows.append(
-            f'<div class="msg"><span class="time">[{message.created_at.strftime("%Y-%m-%d %H:%M")}]</span> '
-            f'<span class="author">{html_module.escape(str(message.author))}</span>: '
-            f'{html_module.escape(content)}</div>'
+            f'[{message.created_at.strftime("%Y-%m-%d %H:%M")}] '
+            f'{message.author}: {content}'
         )
+
+    message_count = len(rows)
 
     if transcript_truncated:
         rows.append(
-            '<div class="msg"><span class="time">[Transcript]</span> '
-            '<span class="author">System</span>: '
-            f'Transcript truncated after {TRANSCRIPT_MESSAGE_LIMIT:,} messages.</div>'
+            f'[Transcript] System: Transcript truncated after '
+            f'{TRANSCRIPT_MESSAGE_LIMIT:,} messages.'
         )
 
-    claimed = f'<@{ticket_info["claimed_by"]}>' if ticket_info["claimed_by"] else "Unclaimed"
-    return f"""<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>Transcript - {html_module.escape(channel.name)}</title>
-<style>
-body {{ font-family: Arial, sans-serif; background: #1e1f22; color: #dbdee1; padding: 2rem; max-width: 900px; margin: auto; }}
-h2 {{ color: #ffffff; }}
-p.meta {{ color: #949ba4; line-height: 1.6; }}
-hr {{ border: none; border-top: 1px solid #2b2d31; margin: 1rem 0; }}
-.msg {{ padding: 4px 0; border-bottom: 1px solid #2b2d31; }}
-.time {{ color: #949ba4; font-size: 12px; }}
-.author {{ color: #5865f2; font-weight: bold; }}
-</style>
-</head>
-<body>
-<h2>Ticket: {html_module.escape(channel.name)}</h2>
-<p class="meta">
-Closed by: {html_module.escape(closer)}<br>
-Close reason: {html_module.escape(reason)}<br>
-Opened by: {html_module.escape(ticket_info["user_name"])} ({ticket_info["user_id"]})<br>
-Claimed by: {claimed}<br>
-Created: {html_module.escape(ticket_info["created_at"])}
-</p>
-<hr>
-{chr(10).join(rows)}
-</body>
-</html>"""
+    return "\n".join(rows), message_count
+
+
+def build_transcript_embed(channel: discord.TextChannel, ticket_info: aiosqlite.Row,
+                           reason: str, closer: str, message_count: int) -> discord.Embed:
+    """Summary embed sent above the transcript file."""
+    embed = discord.Embed(
+        title=f"🎫 Ticket Transcript — #{channel.name}",
+        color=0x5865f2,
+    )
+    embed.add_field(
+        name="Opened by",
+        value=f"{ticket_info['user_name']} (<@{ticket_info['user_id']}>)",
+        inline=False,
+    )
+    embed.add_field(
+        name="Claimed by",
+        value=f"<@{ticket_info['claimed_by']}>" if ticket_info["claimed_by"] else "Unclaimed",
+        inline=False,
+    )
+    embed.add_field(name="Closed by", value=closer, inline=False)
+    embed.add_field(name="Reason", value=reason or "No reason provided.", inline=False)
+    embed.add_field(name="Created", value=ticket_info["created_at"], inline=False)
+    embed.add_field(name="Messages", value=str(message_count), inline=False)
+    return embed
 
 
 async def perform_close(channel: discord.TextChannel, reason: str, closer: str,
                         interaction: discord.Interaction | None = None) -> None:
-    """Shared close flow: transcript .html -> transcripts channel + opener DM, stats, mod log, delete row + channel."""
+    """Shared close flow: transcript embed + .txt -> transcripts channel + opener DM, stats, mod log, delete row + channel."""
     guild = channel.guild
     guild_id = str(guild.id)
     _open_ticket_channels.discard(channel.id)
@@ -158,19 +155,27 @@ async def perform_close(channel: discord.TextChannel, reason: str, closer: str,
     cfg = await TicketConfig.fetch(guild_id)
     transcripts_channel = guild.get_channel(cfg.transcripts_channel) if cfg.transcripts_channel else None
 
-    html_text = await build_transcript(channel, ticket_info, reason, closer)
-    filename = f"transcript-{channel.name}.html"
+    transcript_text, message_count = await build_transcript(channel)
+    transcript_embed = build_transcript_embed(channel, ticket_info, reason,
+                                              closer, message_count)
+    filename = f"transcript-{channel.name}.txt"
 
     if transcripts_channel:
         try:
-            await transcripts_channel.send(file=discord.File(io.BytesIO(html_text.encode("utf-8")), filename=filename))
+            await transcripts_channel.send(embed=transcript_embed)
+            await transcripts_channel.send(
+                file=discord.File(io.BytesIO(transcript_text.encode("utf-8")), filename=filename)
+            )
         except (discord.Forbidden, discord.HTTPException):
             pass
 
     try:
         opener = guild.get_member(int(ticket_info["user_id"]))
         if opener:
-            await opener.send(file=discord.File(io.BytesIO(html_text.encode("utf-8")), filename=filename))
+            await opener.send(embed=transcript_embed)
+            await opener.send(
+                file=discord.File(io.BytesIO(transcript_text.encode("utf-8")), filename=filename)
+            )
     except (discord.Forbidden, discord.NotFound, ValueError):
         pass
 

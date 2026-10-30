@@ -42,6 +42,7 @@ class DuziyBot(commands.Bot):
         await init_db()
 
         await self.load_extensions()
+        self.remove_panel_replaced_commands()
 
         # Persistent views must be registered before any interactions arrive
         from cogs.tickets import TicketControlsView, TicketPanelView
@@ -50,6 +51,20 @@ class DuziyBot(commands.Bot):
         self.add_view(TicketPanelView())
         self.add_view(TicketControlsView())
         self.add_view(VerifyPanelView())
+
+        # Persistent views for reaction-role menus and suggestions.
+        from cogs.reaction_roles import get_persistent_views as get_reaction_views
+        from cogs.suggestions import get_persistent_suggestion_views
+        from cogs.giveaways import get_persistent_giveaway_views
+        from cogs.server_defense import AntiRaidView
+        self.add_view(AntiRaidView())
+        for view in await get_reaction_views():
+            self.add_view(view)
+        for view in await get_persistent_suggestion_views():
+            self.add_view(view)
+        for view in await get_persistent_giveaway_views():
+            self.add_view(view)
+
         voice_cog = self.get_cog("Voice")
         if voice_cog is not None:
             self.add_view(ChannelControlsView(voice_cog))
@@ -71,6 +86,44 @@ class DuziyBot(commands.Bot):
 
         synced = await self.tree.sync()
         log.info("Slash commands synced: %d", len(synced))
+
+    def remove_panel_replaced_commands(self):
+        """Hide configuration commands that are now managed through /setup panels."""
+        top_level_removed = {"levelconfig", "levelroles"}
+        child_removals = {
+            "suggestion": {"channel"},
+            "counting": {"set", "disable", "ignore", "unignore"},
+            "rolemaintain": {"enable", "ignore", "unignore"},
+            "antiraid": {"enable", "threshold", "new-account", "action", "quarantine-role"},
+            "reactionrole": {"create", "add", "remove", "post", "delete"},
+        }
+        nested_removals = {
+            ("lockdown", "preset"): {
+                "create", "edit", "delete", "channel-add", "channel-remove", "channel-list"
+            }
+        }
+
+        for command in list(self.tree.get_commands()):
+            if command.name in top_level_removed:
+                self.tree.remove_command(command.name)
+                continue
+
+            child_names = child_removals.get(command.name, set())
+            for child in list(getattr(command, "commands", [])):
+                if child.name in child_names and hasattr(command, "remove_command"):
+                    command.remove_command(child.name)
+
+            # Keep /lockdown preset run/list/active/restore while moving its
+            # configuration workflow into /setup.
+            if command.name == "lockdown" and hasattr(command, "commands"):
+                preset_group = next(
+                    (child for child in command.commands if child.name == "preset"),
+                    None,
+                )
+                if preset_group is not None and hasattr(preset_group, "remove_command"):
+                    for child in list(preset_group.commands):
+                        if child.name in nested_removals[("lockdown", "preset")]:
+                            preset_group.remove_command(child.name)
 
     async def load_extensions(self):
         cogs_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cogs")

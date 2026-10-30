@@ -3,11 +3,13 @@ import datetime
 import re
 from typing import Optional
 
+import aiosqlite
 import discord
 from discord import app_commands
 from discord.ext import commands
 
 from cog_utils import (
+    DB_FILE,
     add_lockdown_channel,
     clear_active_lockdown,
     clear_lockdown_channels,
@@ -112,7 +114,16 @@ async def _modlog(guild, action, actor, target, reason=None, extra=None):
         embed.add_field(name="Reason", value=truncate(reason), inline=False)
     if extra:
         embed.add_field(name="Details", value=truncate(extra), inline=False)
-    await log_event(guild, "mod_action", embed)
+    sent = await log_event(guild, "mod_action", embed)
+    if sent is not None:
+        # Store the actual log message so staff can edit the case later.
+        async with aiosqlite.connect(DB_FILE) as db:
+            await db.execute(
+                "UPDATE mod_cases SET log_channel_id = ?, log_message_id = ? "
+                "WHERE case_id = ? AND guild_id = ?",
+                (str(sent.channel.id), str(sent.id), case_id, str(guild.id)),
+            )
+            await db.commit()
     return case_id
 
 
@@ -313,6 +324,12 @@ class Moderation(commands.Cog):
         self.lockdown_group = LockdownGroup(self)
         self.bot.tree.add_command(self.lockdown_group)
 
+    async def cog_load(self):
+        # Loaded lazily so server_defense can import this module's lock helpers
+        # without creating a circular import.
+        from cogs.server_defense import LockdownPresetGroup
+        self.lockdown_group.add_command(LockdownPresetGroup())
+
     async def cog_unload(self):
         self.bot.tree.remove_command("lockdown", type=discord.AppCommandType.chat_input)
 
@@ -375,6 +392,10 @@ class Moderation(commands.Cog):
                     "I can't kick that user — their role is at or above mine.", ephemeral=True)
                 return
 
+        if member is not None:
+            # Local import avoids a circular dependency with ModWorkflows.
+            from cogs.mod_workflows import snapshot_member_roles
+            await snapshot_member_roles(member, "Before kick")
         await interaction.guild.kick(user, reason=reason)
         await interaction.response.send_message(f"{user.mention} has been kicked. Reason: {reason}", ephemeral=True)
         await _modlog(interaction.guild, "Kick", interaction.user, user, reason)
@@ -398,6 +419,10 @@ class Moderation(commands.Cog):
                     "I can't ban that user — their role is at or above mine.", ephemeral=True)
                 return
 
+        if member is not None:
+            # Local import avoids a circular dependency with ModWorkflows.
+            from cogs.mod_workflows import snapshot_member_roles
+            await snapshot_member_roles(member, "Before ban")
         await interaction.guild.ban(user, reason=reason, delete_message_days=delete_message_days)
         await interaction.response.send_message(f"{user.mention} has been banned. Reason: {reason}", ephemeral=True)
         await _modlog(interaction.guild, "Ban", interaction.user, user, reason,
@@ -457,6 +482,18 @@ class Moderation(commands.Cog):
     @app_commands.command(name="cases", description="Show the most recent moderation cases.")
     @app_commands.checks.has_permissions(moderate_members=True)
     async def cases(self, interaction: discord.Interaction):
+        def target_mention(target_id: str) -> str:
+            """Render channels, roles, and members with their proper mention syntax."""
+            try:
+                target_value = int(target_id)
+            except ValueError:
+                return target_id
+            if interaction.guild.get_channel(target_value) is not None:
+                return f"<#{target_value}>"
+            if interaction.guild.get_role(target_value) is not None:
+                return f"<@&{target_value}>"
+            return f"<@{target_value}>"
+
         rows = await get_recent_cases(str(interaction.guild.id), 10)
         embed = base_embed(f"{EMOJI['logs']} Recent Mod Cases", "primary")
         if not rows:
@@ -466,7 +503,7 @@ class Moderation(commands.Cog):
                 reason = row["reason"] or "No reason provided."
                 embed.add_field(
                     name=f"Case #{row['case_id']} \u00b7 {row['action']}",
-                    value=f"Moderator: <@{row['actor_id']}>\nTarget: <@{row['target_id']}>\nReason: {reason}",
+                    value=f"Moderator: <@{row['actor_id']}>\nTarget: {target_mention(row['target_id'])}\nReason: {reason}",
                     inline=True,
                 )
         await interaction.response.send_message(embed=embed, ephemeral=True)
